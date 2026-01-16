@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, query, orderBy, Timestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, Timestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 interface RawMaterial {
@@ -75,8 +75,7 @@ export default function Processing() {
   const fetchRawMaterials = async () => {
     try {
       const materialsRef = collection(db, "rawMaterials");
-      const q = query(materialsRef, orderBy("createdAt", "desc"));
-      const snapshot = await getDocs(q);
+      const snapshot = await getDocs(materialsRef);
       const materials = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -104,10 +103,16 @@ export default function Processing() {
     setLoading(true);
     try {
       const materialsRef = collection(db, "rawMaterials");
-      await addDoc(materialsRef, {
-        ...formData,
+      const docRef = await addDoc(materialsRef, {
+        name: formData.name,
+        batchNo: formData.batchNo,
+        quantity: formData.quantity,
+        status: formData.status,
+        supplier: formData.supplier,
+        expiryDate: formData.expiryDate,
         createdAt: Timestamp.now(),
       });
+      console.log("Document written with ID: ", docRef.id);
       toast({
         title: "Success",
         description: "Material added successfully",
@@ -121,12 +126,13 @@ export default function Processing() {
         supplier: "",
         expiryDate: "",
       });
-      fetchRawMaterials();
-    } catch (error) {
+      await fetchRawMaterials();
+    } catch (error: unknown) {
       console.error("Error adding material:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to add material";
       toast({
         title: "Error",
-        description: "Failed to add material",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

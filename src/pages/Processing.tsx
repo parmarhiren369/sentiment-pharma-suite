@@ -101,9 +101,13 @@ export default function Processing() {
     }
 
     setLoading(true);
+    console.log("Starting to add material...", formData);
+    
     try {
       const materialsRef = collection(db, "rawMaterials");
-      const docRef = await addDoc(materialsRef, {
+      console.log("Collection ref obtained:", materialsRef.path);
+      
+      const materialData = {
         name: formData.name,
         batchNo: formData.batchNo,
         quantity: formData.quantity,
@@ -111,8 +115,12 @@ export default function Processing() {
         supplier: formData.supplier,
         expiryDate: formData.expiryDate,
         createdAt: Timestamp.now(),
-      });
+      };
+      console.log("Data to save:", materialData);
+      
+      const docRef = await addDoc(materialsRef, materialData);
       console.log("Document written with ID: ", docRef.id);
+      
       toast({
         title: "Success",
         description: "Material added successfully",

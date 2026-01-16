@@ -1,0 +1,102 @@
+import { NavLink, useLocation } from "react-router-dom";
+import { 
+  FlaskConical, 
+  Package, 
+  Receipt, 
+  Stethoscope,
+  Settings,
+  User,
+  LayoutDashboard
+} from "lucide-react";
+
+const mainMenuItems = [
+  { title: "Processing", url: "/", icon: FlaskConical },
+  { title: "Inventory", url: "/inventory", icon: Package },
+  { title: "Accounting", url: "/accounting", icon: Receipt },
+  { title: "Doctors", url: "/doctors", icon: Stethoscope },
+];
+
+const systemMenuItems = [
+  { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Profile", url: "/profile", icon: User },
+];
+
+export function AppSidebar() {
+  const location = useLocation();
+
+  const isActive = (path: string) => {
+    if (path === "/") return location.pathname === "/";
+    return location.pathname.startsWith(path);
+  };
+
+  return (
+    <aside className="w-64 min-h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
+      {/* Logo */}
+      <div className="p-6 border-b border-sidebar-border">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
+            <FlaskConical className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <span className="text-foreground font-bold text-lg">Sentiment</span>
+            <span className="text-primary font-bold text-lg ml-1">Pharma</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Menu */}
+      <nav className="flex-1 p-4">
+        <div className="mb-6">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-4">
+            Main Menu
+          </p>
+          <ul className="space-y-1">
+            {mainMenuItems.map((item) => (
+              <li key={item.title}>
+                <NavLink
+                  to={item.url}
+                  className={`nav-item ${isActive(item.url) ? "nav-item-active" : ""}`}
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span className="font-medium">{item.title}</span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-4">
+            System
+          </p>
+          <ul className="space-y-1">
+            {systemMenuItems.map((item) => (
+              <li key={item.title}>
+                <NavLink
+                  to={item.url}
+                  className={`nav-item ${isActive(item.url) ? "nav-item-active" : ""}`}
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span className="font-medium">{item.title}</span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </nav>
+
+      {/* User Section */}
+      <div className="p-4 border-t border-sidebar-border">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+            <User className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-foreground">Admin User</p>
+            <p className="text-xs text-muted-foreground">Pharma Manager</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}

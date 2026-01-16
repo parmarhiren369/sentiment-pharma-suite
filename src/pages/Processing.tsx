@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { QuickActionCard } from "@/components/cards/QuickActionCard";
@@ -14,6 +14,13 @@ import {
   ArrowRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, getDocs, query, orderBy, Timestamp } from "firebase/firestore";
+import { useToast } from "@/hooks/use-toast";
 
 interface RawMaterial {
   id: string;
@@ -52,6 +59,80 @@ const processedMaterialsData: ProcessedMaterial[] = [
 
 export default function Processing() {
   const [activeTab, setActiveTab] = useState<"raw" | "processed">("raw");
+  const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    batchNo: "",
+    quantity: "",
+    status: "In Stock" as "In Stock" | "Low Stock" | "Processing",
+    supplier: "",
+    expiryDate: "",
+  });
+  const { toast } = useToast();
+
+  const fetchRawMaterials = async () => {
+    try {
+      const materialsRef = collection(db, "rawMaterials");
+      const q = query(materialsRef, orderBy("createdAt", "desc"));
+      const snapshot = await getDocs(q);
+      const materials = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as RawMaterial[];
+      setRawMaterials(materials);
+    } catch (error) {
+      console.error("Error fetching materials:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchRawMaterials();
+  }, []);
+
+  const handleAddMaterial = async () => {
+    if (!formData.name || !formData.batchNo || !formData.quantity || !formData.supplier || !formData.expiryDate) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const materialsRef = collection(db, "rawMaterials");
+      await addDoc(materialsRef, {
+        ...formData,
+        createdAt: Timestamp.now(),
+      });
+      toast({
+        title: "Success",
+        description: "Material added successfully",
+      });
+      setIsAddMaterialOpen(false);
+      setFormData({
+        name: "",
+        batchNo: "",
+        quantity: "",
+        status: "In Stock",
+        supplier: "",
+        expiryDate: "",
+      });
+      fetchRawMaterials();
+    } catch (error) {
+      console.error("Error adding material:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add material",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const rawMaterialColumns = [
     { key: "name" as keyof RawMaterial, header: "Material Name" },
@@ -185,13 +266,13 @@ export default function Processing() {
                   </Button>
                 </div>
 
-                {activeTab === "raw" ? (
-                  <DataTable
-                    data={rawMaterialsData}
-                    columns={rawMaterialColumns}
-                    keyField="id"
-                  />
-                ) : (
+{activeTab === "raw" ? (
+                    <DataTable
+                      data={[...rawMaterials, ...rawMaterialsData]}
+                      columns={rawMaterialColumns}
+                      keyField="id"
+                    />
+                  ) : (
                   <DataTable
                     data={processedMaterialsData}
                     columns={processedMaterialColumns}
@@ -207,7 +288,7 @@ export default function Processing() {
             <div className="bg-card rounded-xl border border-border p-6">
               <h3 className="section-title mb-4">Quick Actions</h3>
               <div className="grid grid-cols-2 gap-3">
-                <QuickActionCard title="Add Material" icon={Plus} />
+                <QuickActionCard title="Add Material" icon={Plus} onClick={() => setIsAddMaterialOpen(true)} />
                 <QuickActionCard title="New Batch" icon={FlaskConical} />
                 <QuickActionCard title="Reports" icon={FileText} />
                 <QuickActionCard title="Analytics" icon={TrendingUp} />
@@ -234,10 +315,93 @@ export default function Processing() {
                   </div>
                 ))}
               </div>
+</div>
             </div>
           </div>
         </div>
-      </div>
-    </>
-  );
-}
+
+        <Dialog open={isAddMaterialOpen} onOpenChange={setIsAddMaterialOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Add New Raw Material</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Material Name</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g., Paracetamol API"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="batchNo">Batch Number</Label>
+                  <Input
+                    id="batchNo"
+                    value={formData.batchNo}
+                    onChange={(e) => setFormData({ ...formData, batchNo: e.target.value })}
+                    placeholder="e.g., PCM-2024-001"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="quantity">Quantity</Label>
+                  <Input
+                    id="quantity"
+                    value={formData.quantity}
+                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                    placeholder="e.g., 500 kg"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select
+                    value={formData.status}
+                    onValueChange={(value) => setFormData({ ...formData, status: value as "In Stock" | "Low Stock" | "Processing" })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="In Stock">In Stock</SelectItem>
+                      <SelectItem value="Low Stock">Low Stock</SelectItem>
+                      <SelectItem value="Processing">Processing</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="expiryDate">Expiry Date</Label>
+                  <Input
+                    id="expiryDate"
+                    type="date"
+                    value={formData.expiryDate}
+                    onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="supplier">Supplier</Label>
+                <Input
+                  id="supplier"
+                  value={formData.supplier}
+                  onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                  placeholder="e.g., ChemPharma Ltd"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsAddMaterialOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleAddMaterial} disabled={loading}>
+                {loading ? "Adding..." : "Add Material"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }

@@ -10,6 +10,7 @@ import Inventory from "./pages/Inventory";
 import Accounting from "./pages/Accounting";
 import Doctors from "./pages/Doctors";
 import NotFound from "./pages/NotFound";
+import "@/lib/firebase";
 
 const queryClient = new QueryClient();
 

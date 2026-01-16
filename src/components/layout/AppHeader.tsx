@@ -1,5 +1,6 @@
 import { Bell, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface AppHeaderProps {
   title: string;
@@ -22,6 +23,8 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
             className="w-72 pl-10 bg-secondary border-border"
           />
         </div>
+
+        <ThemeToggle />
 
         <button className="relative w-10 h-10 rounded-lg bg-secondary flex items-center justify-center hover:bg-secondary/80 transition-colors">
           <Bell className="w-5 h-5 text-muted-foreground" />

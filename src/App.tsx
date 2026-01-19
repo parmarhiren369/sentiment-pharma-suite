@@ -6,7 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Index from "./pages/Index";
-import Inventory from "./pages/Inventory";
+import RawInventory from "./pages/RawInventory";
+import ProcessedInventory from "./pages/ProcessedInventory";
 import Accounting from "./pages/Accounting";
 import Doctors from "./pages/Doctors";
 import NotFound from "./pages/NotFound";
@@ -24,7 +25,8 @@ const App = () => (
           <Routes>
             <Route element={<AppLayout />}>
               <Route path="/" element={<Index />} />
-              <Route path="/inventory" element={<Inventory />} />
+              <Route path="/raw-inventory" element={<RawInventory />} />
+              <Route path="/processed-inventory" element={<ProcessedInventory />} />
               <Route path="/accounting" element={<Accounting />} />
               <Route path="/doctors" element={<Doctors />} />
             </Route>

@@ -6,12 +6,14 @@ import {
   Stethoscope,
   Settings,
   User,
-  LayoutDashboard
+  LayoutDashboard,
+  Boxes
 } from "lucide-react";
 
 const mainMenuItems = [
   { title: "Processing", url: "/", icon: FlaskConical },
-  { title: "Inventory", url: "/inventory", icon: Package },
+  { title: "Raw Inventory", url: "/raw-inventory", icon: Package },
+  { title: "Processed Inventory", url: "/processed-inventory", icon: Boxes },
   { title: "Accounting", url: "/accounting", icon: Receipt },
   { title: "Doctors", url: "/doctors", icon: Stethoscope },
 ];

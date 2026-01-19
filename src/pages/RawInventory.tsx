@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
@@ -20,6 +20,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, getDocs, Timestamp } from "firebase/firestore";
 
 interface RawInventoryItem {
   id: string;
@@ -45,6 +47,8 @@ const rawInventory: RawInventoryItem[] = [
 ];
 
 export default function RawInventory() {
+  const [rawInventoryData, setRawInventoryData] = useState<RawInventoryItem[]>([]);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -62,8 +66,38 @@ export default function RawInventory() {
   });
   const { toast } = useToast();
 
+  // Fetch raw inventory from Firebase
+  const fetchRawInventory = async () => {
+    try {
+      setLoading(true);
+      const inventoryRef = collection(db, "rawInventory");
+      const snapshot = await getDocs(inventoryRef);
+      const items = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as RawInventoryItem[];
+      setRawInventoryData(items);
+    } catch (error) {
+      console.error("Error fetching inventory:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch inventory data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRawInventory();
+  }, []);
+
+  // Combine static data with Firebase data
+  const allInventoryData = [...rawInventoryData, ...rawInventory];
+
   // Filter data based on search and date range
-  const filteredData = rawInventory.filter((item) => {
+  const filteredData = allInventoryData.filter((item) => {
     const matchesSearch = searchQuery === "" || 
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -75,7 +109,7 @@ export default function RawInventory() {
     return matchesSearch && matchesDateRange;
   });
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!formData.name || !formData.category || !formData.quantity || !formData.location || !formData.supplier) {
       toast({
         title: "Error",
@@ -85,21 +119,53 @@ export default function RawInventory() {
       return;
     }
 
-    toast({
-      title: "Success",
-      description: "Item added successfully",
-    });
-    setIsAddItemOpen(false);
-    setFormData({
-      name: "",
-      category: "",
-      quantity: "",
-      unit: "kg",
-      location: "",
-      reorderLevel: "",
-      status: "Adequate",
-      supplier: "",
-    });
+    setLoading(true);
+    try {
+      const inventoryRef = collection(db, "rawInventory");
+      const itemData = {
+        name: formData.name,
+        category: formData.category,
+        quantity: formData.quantity,
+        unit: formData.unit,
+        location: formData.location,
+        reorderLevel: formData.reorderLevel || `${Math.floor(parseInt(formData.quantity) * 0.2)} ${formData.unit}`,
+        status: formData.status,
+        supplier: formData.supplier,
+        lastUpdated: new Date().toISOString().split('T')[0],
+        createdAt: Timestamp.now(),
+      };
+      
+      await addDoc(inventoryRef, itemData);
+      
+      toast({
+        title: "Success",
+        description: "Item added successfully",
+      });
+      
+      setIsAddItemOpen(false);
+      setFormData({
+        name: "",
+        category: "",
+        quantity: "",
+        unit: "kg",
+        location: "",
+        reorderLevel: "",
+        status: "Adequate",
+        supplier: "",
+      });
+      
+      await fetchRawInventory();
+    } catch (error) {
+      console.error("Error adding item:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to add item";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const clearFilters = () => {
@@ -261,7 +327,7 @@ export default function RawInventory() {
                   Add Item
                 </Button>
                 <div className="text-sm text-muted-foreground ml-auto">
-                  Showing {filteredData.length} of {rawInventory.length} items
+                  Showing {filteredData.length} of {allInventoryData.length} items
                 </div>
               </div>
             </div>
@@ -404,8 +470,8 @@ export default function RawInventory() {
             <Button variant="outline" onClick={() => setIsAddItemOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddItem}>
-              Add Item
+            <Button onClick={handleAddItem} disabled={loading}>
+              {loading ? "Adding..." : "Add Item"}
             </Button>
           </DialogFooter>
         </DialogContent>

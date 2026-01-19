@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
@@ -20,6 +20,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, getDocs, Timestamp } from "firebase/firestore";
 
 interface ProcessedInventoryItem {
   id: string;
@@ -45,6 +47,8 @@ const processedInventory: ProcessedInventoryItem[] = [
 ];
 
 export default function ProcessedInventory() {
+  const [processedInventoryData, setProcessedInventoryData] = useState<ProcessedInventoryItem[]>([]);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -63,8 +67,38 @@ export default function ProcessedInventory() {
   });
   const { toast } = useToast();
 
+  // Fetch processed inventory from Firebase
+  const fetchProcessedInventory = async () => {
+    try {
+      setLoading(true);
+      const inventoryRef = collection(db, "processedInventory");
+      const snapshot = await getDocs(inventoryRef);
+      const items = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as ProcessedInventoryItem[];
+      setProcessedInventoryData(items);
+    } catch (error) {
+      console.error("Error fetching inventory:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch inventory data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProcessedInventory();
+  }, []);
+
+  // Combine static data with Firebase data
+  const allInventoryData = [...processedInventoryData, ...processedInventory];
+
   // Filter data based on search and date range
-  const filteredData = processedInventory.filter((item) => {
+  const filteredData = allInventoryData.filter((item) => {
     const matchesSearch = searchQuery === "" || 
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -76,7 +110,7 @@ export default function ProcessedInventory() {
     return matchesSearch && matchesDateRange;
   });
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!formData.name || !formData.category || !formData.quantity || !formData.location || !formData.batchNo || !formData.processedDate) {
       toast({
         title: "Error",
@@ -86,22 +120,55 @@ export default function ProcessedInventory() {
       return;
     }
 
-    toast({
-      title: "Success",
-      description: "Item added successfully",
-    });
-    setIsAddItemOpen(false);
-    setFormData({
-      name: "",
-      category: "",
-      quantity: "",
-      unit: "kg",
-      location: "",
-      reorderLevel: "",
-      status: "Adequate",
-      batchNo: "",
-      processedDate: "",
-    });
+    setLoading(true);
+    try {
+      const inventoryRef = collection(db, "processedInventory");
+      const itemData = {
+        name: formData.name,
+        category: formData.category,
+        quantity: formData.quantity,
+        unit: formData.unit,
+        location: formData.location,
+        reorderLevel: formData.reorderLevel || `${Math.floor(parseInt(formData.quantity) * 0.2)} ${formData.unit}`,
+        status: formData.status,
+        batchNo: formData.batchNo,
+        processedDate: formData.processedDate,
+        lastUpdated: new Date().toISOString().split('T')[0],
+        createdAt: Timestamp.now(),
+      };
+      
+      await addDoc(inventoryRef, itemData);
+      
+      toast({
+        title: "Success",
+        description: "Item added successfully",
+      });
+      
+      setIsAddItemOpen(false);
+      setFormData({
+        name: "",
+        category: "",
+        quantity: "",
+        unit: "kg",
+        location: "",
+        reorderLevel: "",
+        status: "Adequate",
+        batchNo: "",
+        processedDate: "",
+      });
+      
+      await fetchProcessedInventory();
+    } catch (error) {
+      console.error("Error adding item:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to add item";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const clearFilters = () => {
@@ -264,7 +331,7 @@ export default function ProcessedInventory() {
                   Add Item
                 </Button>
                 <div className="text-sm text-muted-foreground ml-auto">
-                  Showing {filteredData.length} of {processedInventory.length} items
+                  Showing {filteredData.length} of {allInventoryData.length} items
                 </div>
               </div>
             </div>
@@ -418,8 +485,8 @@ export default function ProcessedInventory() {
             <Button variant="outline" onClick={() => setIsAddItemOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddItem}>
-              Add Item
+            <Button onClick={handleAddItem} disabled={loading}>
+              {loading ? "Adding..." : "Add Item"}
             </Button>
           </DialogFooter>
         </DialogContent>

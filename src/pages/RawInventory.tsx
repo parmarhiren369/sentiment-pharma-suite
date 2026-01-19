@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
@@ -8,9 +9,17 @@ import {
   Download,
   Filter,
   TrendingUp,
-  CheckCircle2
+  CheckCircle2,
+  Plus,
+  Search,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 
 interface RawInventoryItem {
   id: string;
@@ -36,6 +45,69 @@ const rawInventory: RawInventoryItem[] = [
 ];
 
 export default function RawInventory() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    category: "",
+    quantity: "",
+    unit: "kg",
+    location: "",
+    reorderLevel: "",
+    status: "Adequate" as "Adequate" | "Low" | "Critical" | "Overstocked",
+    supplier: "",
+  });
+  const { toast } = useToast();
+
+  // Filter data based on search and date range
+  const filteredData = rawInventory.filter((item) => {
+    const matchesSearch = searchQuery === "" || 
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.supplier.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesDateRange = (!startDate || new Date(item.lastUpdated) >= new Date(startDate)) &&
+                             (!endDate || new Date(item.lastUpdated) <= new Date(endDate));
+    
+    return matchesSearch && matchesDateRange;
+  });
+
+  const handleAddItem = () => {
+    if (!formData.name || !formData.category || !formData.quantity || !formData.location || !formData.supplier) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Success",
+      description: "Item added successfully",
+    });
+    setIsAddItemOpen(false);
+    setFormData({
+      name: "",
+      category: "",
+      quantity: "",
+      unit: "kg",
+      location: "",
+      reorderLevel: "",
+      status: "Adequate",
+      supplier: "",
+    });
+  };
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setStartDate("");
+    setEndDate("");
+  };
+
   const inventoryColumns = [
     { key: "name" as keyof RawInventoryItem, header: "Material Name" },
     { key: "category" as keyof RawInventoryItem, header: "Category" },
@@ -118,23 +190,86 @@ export default function RawInventory() {
               <p className="section-subtitle">Complete overview of raw material stock levels</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2"
+                onClick={() => setShowFilters(!showFilters)}
+              >
                 <Filter className="w-4 h-4" />
-                Filter
+                {showFilters ? "Hide Filters" : "Show Filters"}
               </Button>
               <Button variant="outline" size="sm" className="gap-2">
                 <Download className="w-4 h-4" />
                 Export
               </Button>
-              <Button size="sm" className="gap-2">
-                View All <ArrowRight className="w-4 h-4" />
-              </Button>
             </div>
           </div>
 
+          {/* Filters Section */}
+          {showFilters && (
+            <div className="px-6 py-4 border-b border-border bg-muted/30">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="md:col-span-2">
+                  <Label htmlFor="search" className="text-sm font-medium mb-2 block">Search</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="search"
+                      placeholder="Search by name, category, or supplier..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="startDate" className="text-sm font-medium mb-2 block">Start Date</Label>
+                  <Input
+                    id="startDate"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="endDate" className="text-sm font-medium mb-2 block">End Date</Label>
+                  <Input
+                    id="endDate"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-4">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={clearFilters}
+                  className="gap-2"
+                >
+                  <X className="w-4 h-4" />
+                  Clear Filters
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={() => setIsAddItemOpen(true)}
+                  className="gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Item
+                </Button>
+                <div className="text-sm text-muted-foreground ml-auto">
+                  Showing {filteredData.length} of {rawInventory.length} items
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="p-6">
             <DataTable
-              data={rawInventory}
+              data={filteredData}
               columns={inventoryColumns}
               keyField="id"
             />
@@ -160,6 +295,121 @@ export default function RawInventory() {
           </div>
         </div>
       </div>
+
+      {/* Add Item Dialog */}
+      <Dialog open={isAddItemOpen} onOpenChange={setIsAddItemOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Add New Raw Material</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="itemName">Material Name *</Label>
+                <Input
+                  id="itemName"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g., Paracetamol API"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="category">Category *</Label>
+                <Input
+                  id="category"
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  placeholder="e.g., Active Ingredient"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="quantity">Quantity *</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  value={formData.quantity}
+                  onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                  placeholder="500"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="unit">Unit</Label>
+                <Select
+                  value={formData.unit}
+                  onValueChange={(value) => setFormData({ ...formData, unit: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kg">kg</SelectItem>
+                    <SelectItem value="g">g</SelectItem>
+                    <SelectItem value="L">L</SelectItem>
+                    <SelectItem value="mL">mL</SelectItem>
+                    <SelectItem value="units">units</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="reorderLevel">Reorder Level</Label>
+                <Input
+                  id="reorderLevel"
+                  value={formData.reorderLevel}
+                  onChange={(e) => setFormData({ ...formData, reorderLevel: e.target.value })}
+                  placeholder="100 kg"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="location">Location *</Label>
+                <Input
+                  id="location"
+                  value={formData.location}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  placeholder="e.g., Warehouse A"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="supplier">Supplier *</Label>
+                <Input
+                  id="supplier"
+                  value={formData.supplier}
+                  onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                  placeholder="e.g., ChemPharma Ltd"
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="status">Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value) => setFormData({ ...formData, status: value as "Adequate" | "Low" | "Critical" | "Overstocked" })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Adequate">Adequate</SelectItem>
+                  <SelectItem value="Low">Low</SelectItem>
+                  <SelectItem value="Critical">Critical</SelectItem>
+                  <SelectItem value="Overstocked">Overstocked</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddItemOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddItem}>
+              Add Item
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

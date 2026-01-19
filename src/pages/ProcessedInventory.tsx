@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
@@ -8,9 +9,17 @@ import {
   Download,
   Filter,
   Activity,
-  CheckCircle2
+  CheckCircle2,
+  Plus,
+  Search,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 
 interface ProcessedInventoryItem {
   id: string;
@@ -36,6 +45,71 @@ const processedInventory: ProcessedInventoryItem[] = [
 ];
 
 export default function ProcessedInventory() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    category: "",
+    quantity: "",
+    unit: "kg",
+    location: "",
+    reorderLevel: "",
+    status: "Adequate" as "Adequate" | "Low" | "Critical" | "Overstocked",
+    batchNo: "",
+    processedDate: "",
+  });
+  const { toast } = useToast();
+
+  // Filter data based on search and date range
+  const filteredData = processedInventory.filter((item) => {
+    const matchesSearch = searchQuery === "" || 
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.batchNo.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesDateRange = (!startDate || new Date(item.processedDate) >= new Date(startDate)) &&
+                             (!endDate || new Date(item.processedDate) <= new Date(endDate));
+    
+    return matchesSearch && matchesDateRange;
+  });
+
+  const handleAddItem = () => {
+    if (!formData.name || !formData.category || !formData.quantity || !formData.location || !formData.batchNo || !formData.processedDate) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Success",
+      description: "Item added successfully",
+    });
+    setIsAddItemOpen(false);
+    setFormData({
+      name: "",
+      category: "",
+      quantity: "",
+      unit: "kg",
+      location: "",
+      reorderLevel: "",
+      status: "Adequate",
+      batchNo: "",
+      processedDate: "",
+    });
+  };
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setStartDate("");
+    setEndDate("");
+  };
+
   const inventoryColumns = [
     { key: "name" as keyof ProcessedInventoryItem, header: "Material Name" },
     { key: "category" as keyof ProcessedInventoryItem, header: "Category" },
@@ -119,23 +193,86 @@ export default function ProcessedInventory() {
               <p className="section-subtitle">Intermediate products ready for final processing</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2"
+                onClick={() => setShowFilters(!showFilters)}
+              >
                 <Filter className="w-4 h-4" />
-                Filter
+                {showFilters ? "Hide Filters" : "Show Filters"}
               </Button>
               <Button variant="outline" size="sm" className="gap-2">
                 <Download className="w-4 h-4" />
                 Export
               </Button>
-              <Button size="sm" className="gap-2">
-                View All <ArrowRight className="w-4 h-4" />
-              </Button>
             </div>
           </div>
 
+          {/* Filters Section */}
+          {showFilters && (
+            <div className="px-6 py-4 border-b border-border bg-muted/30">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="md:col-span-2">
+                  <Label htmlFor="search" className="text-sm font-medium mb-2 block">Search</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="search"
+                      placeholder="Search by name, category, or batch number..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="startDate" className="text-sm font-medium mb-2 block">Start Date</Label>
+                  <Input
+                    id="startDate"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="endDate" className="text-sm font-medium mb-2 block">End Date</Label>
+                  <Input
+                    id="endDate"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-4">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={clearFilters}
+                  className="gap-2"
+                >
+                  <X className="w-4 h-4" />
+                  Clear Filters
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={() => setIsAddItemOpen(true)}
+                  className="gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Item
+                </Button>
+                <div className="text-sm text-muted-foreground ml-auto">
+                  Showing {filteredData.length} of {processedInventory.length} items
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="p-6">
             <DataTable
-              data={processedInventory}
+              data={filteredData}
               columns={inventoryColumns}
               keyField="id"
             />
@@ -161,6 +298,132 @@ export default function ProcessedInventory() {
           </div>
         </div>
       </div>
+
+      {/* Add Item Dialog */}
+      <Dialog open={isAddItemOpen} onOpenChange={setIsAddItemOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Add New Processed Material</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="itemName">Material Name *</Label>
+                <Input
+                  id="itemName"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g., Paracetamol Granules"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="category">Category *</Label>
+                <Input
+                  id="category"
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  placeholder="e.g., Intermediate"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="batchNo">Batch Number *</Label>
+                <Input
+                  id="batchNo"
+                  value={formData.batchNo}
+                  onChange={(e) => setFormData({ ...formData, batchNo: e.target.value })}
+                  placeholder="e.g., PG-2024-001"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="processedDate">Processed Date *</Label>
+                <Input
+                  id="processedDate"
+                  type="date"
+                  value={formData.processedDate}
+                  onChange={(e) => setFormData({ ...formData, processedDate: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="quantity">Quantity *</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  value={formData.quantity}
+                  onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                  placeholder="200"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="unit">Unit</Label>
+                <Select
+                  value={formData.unit}
+                  onValueChange={(value) => setFormData({ ...formData, unit: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kg">kg</SelectItem>
+                    <SelectItem value="g">g</SelectItem>
+                    <SelectItem value="L">L</SelectItem>
+                    <SelectItem value="mL">mL</SelectItem>
+                    <SelectItem value="units">units</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="reorderLevel">Reorder Level</Label>
+                <Input
+                  id="reorderLevel"
+                  value={formData.reorderLevel}
+                  onChange={(e) => setFormData({ ...formData, reorderLevel: e.target.value })}
+                  placeholder="50 kg"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="location">Location *</Label>
+                <Input
+                  id="location"
+                  value={formData.location}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  placeholder="e.g., Production Bay 1"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) => setFormData({ ...formData, status: value as "Adequate" | "Low" | "Critical" | "Overstocked" })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Adequate">Adequate</SelectItem>
+                    <SelectItem value="Low">Low</SelectItem>
+                    <SelectItem value="Critical">Critical</SelectItem>
+                    <SelectItem value="Overstocked">Overstocked</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddItemOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddItem}>
+              Add Item
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

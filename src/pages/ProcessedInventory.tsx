@@ -71,12 +71,18 @@ export default function ProcessedInventory() {
   const fetchProcessedInventory = async () => {
     try {
       setLoading(true);
+      console.log("Fetching processed inventory from Firebase...");
       const inventoryRef = collection(db, "processedInventory");
       const snapshot = await getDocs(inventoryRef);
-      const items = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as ProcessedInventoryItem[];
+      const items = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        console.log("Fetched document:", doc.id, data);
+        return {
+          id: doc.id,
+          ...data,
+        };
+      }) as ProcessedInventoryItem[];
+      console.log("Total items fetched:", items.length);
       setProcessedInventoryData(items);
     } catch (error) {
       console.error("Error fetching inventory:", error);
@@ -121,6 +127,8 @@ export default function ProcessedInventory() {
     }
 
     setLoading(true);
+    console.log("Adding new item to Firebase...", formData);
+    
     try {
       const inventoryRef = collection(db, "processedInventory");
       const itemData = {
@@ -137,11 +145,13 @@ export default function ProcessedInventory() {
         createdAt: Timestamp.now(),
       };
       
-      await addDoc(inventoryRef, itemData);
+      console.log("Item data to save:", itemData);
+      const docRef = await addDoc(inventoryRef, itemData);
+      console.log("Document added with ID:", docRef.id);
       
       toast({
         title: "Success",
-        description: "Item added successfully",
+        description: "Item added successfully to inventory",
       });
       
       setIsAddItemOpen(false);
@@ -157,6 +167,8 @@ export default function ProcessedInventory() {
         processedDate: "",
       });
       
+      // Refresh the inventory list
+      console.log("Refreshing inventory list...");
       await fetchProcessedInventory();
     } catch (error) {
       console.error("Error adding item:", error);

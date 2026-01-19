@@ -70,12 +70,18 @@ export default function RawInventory() {
   const fetchRawInventory = async () => {
     try {
       setLoading(true);
+      console.log("Fetching raw inventory from Firebase...");
       const inventoryRef = collection(db, "rawInventory");
       const snapshot = await getDocs(inventoryRef);
-      const items = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as RawInventoryItem[];
+      const items = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        console.log("Fetched document:", doc.id, data);
+        return {
+          id: doc.id,
+          ...data,
+        };
+      }) as RawInventoryItem[];
+      console.log("Total items fetched:", items.length);
       setRawInventoryData(items);
     } catch (error) {
       console.error("Error fetching inventory:", error);
@@ -120,6 +126,8 @@ export default function RawInventory() {
     }
 
     setLoading(true);
+    console.log("Adding new item to Firebase...", formData);
+    
     try {
       const inventoryRef = collection(db, "rawInventory");
       const itemData = {
@@ -135,11 +143,13 @@ export default function RawInventory() {
         createdAt: Timestamp.now(),
       };
       
-      await addDoc(inventoryRef, itemData);
+      console.log("Item data to save:", itemData);
+      const docRef = await addDoc(inventoryRef, itemData);
+      console.log("Document added with ID:", docRef.id);
       
       toast({
         title: "Success",
-        description: "Item added successfully",
+        description: "Item added successfully to inventory",
       });
       
       setIsAddItemOpen(false);
@@ -154,6 +164,8 @@ export default function RawInventory() {
         supplier: "",
       });
       
+      // Refresh the inventory list
+      console.log("Refreshing inventory list...");
       await fetchRawInventory();
     } catch (error) {
       console.error("Error adding item:", error);

@@ -80,6 +80,7 @@ export default function Processing() {
   const [manualBatchNo, setManualBatchNo] = useState("");
   const [batchDate, setBatchDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
+  const [generatedBatchNo, setGeneratedBatchNo] = useState("");
   const { toast } = useToast();
 
   const fetchRawInventory = async () => {
@@ -154,6 +155,12 @@ export default function Processing() {
     fetchRawInventory();
     fetchBatches();
   }, []);
+
+  useEffect(() => {
+    if (batchMode === "system") {
+      generateBatchNumber().then(setGeneratedBatchNo);
+    }
+  }, [batchMode]);
 
   const handleSaveBatch = async () => {
     // Validation
@@ -479,7 +486,7 @@ export default function Processing() {
                 {batchMode === "system" ? (
                   <div className="p-4 bg-muted rounded-lg">
                     <Label className="text-sm font-medium">Batch Number</Label>
-                    <p className="text-lg font-semibold mt-1">{generateBatchNumber()}</p>
+                    <p className="text-lg font-semibold mt-1">{generatedBatchNo || "Loading..."}</p>
                   </div>
                 ) : (
                   <div>

@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 
 const mainMenuItems = [
-  { title: "Processing", url: "/", icon: FlaskConical },
+  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Processing", url: "/processing", icon: FlaskConical },
   { title: "Raw Inventory", url: "/raw-inventory", icon: Package },
   { title: "Processed Inventory", url: "/processed-inventory", icon: Boxes },
   { title: "Accounting", url: "/accounting", icon: Receipt },

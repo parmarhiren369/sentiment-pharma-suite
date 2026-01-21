@@ -12,32 +12,56 @@ import Accounting from "./pages/Accounting";
 import Doctors from "./pages/Doctors";
 import NotFound from "./pages/NotFound";
 import Processing from "./pages/Processing";
-import "@/lib/firebase";
+import { Suspense } from "react";
 
-const queryClient = new QueryClient();
+console.log("App.tsx loaded");
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route path="/" element={<Index />} />
-              <Route path="/raw-inventory" element={<RawInventory />} />
-              <Route path="/processed-inventory" element={<ProcessedInventory />} />
-              <Route path="/processing" element={<Processing />} />
-              <Route path="/accounting" element={<Accounting />} />
-              <Route path="/doctors" element={<Doctors />} />
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center min-h-screen bg-background">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+      <p className="text-muted-foreground">Loading...</p>
+    </div>
+  </div>
 );
+
+const App = () => {
+  console.log("App rendering...");
+  
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route element={<AppLayout />}>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/raw-inventory" element={<RawInventory />} />
+                  <Route path="/processed-inventory" element={<ProcessedInventory />} />
+                  <Route path="/processing" element={<Processing />} />
+                  <Route path="/accounting" element={<Accounting />} />
+                  <Route path="/doctors" element={<Doctors />} />
+                </Route>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </Suspense>
+  );
+};
 
 export default App;

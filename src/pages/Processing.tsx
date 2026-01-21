@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, Timestamp, query, orderBy, limit, updateDoc, doc } from "firebase/firestore";
@@ -61,6 +60,7 @@ interface BatchItem {
 interface Batch {
   id: string;
   batchNo: string;
+  manualBatchNo?: string;
   items: BatchItem[];
   createdAt: Date;
   status: string;
@@ -77,7 +77,6 @@ export default function Processing() {
   const [batchItems, setBatchItems] = useState<BatchItem[]>([
     { rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }
   ]);
-  const [batchMode, setBatchMode] = useState<"system" | "manual">("system");
   const [manualBatchNo, setManualBatchNo] = useState("");
   const [batchDate, setBatchDate] = useState(new Date().toISOString().split('T')[0]);
   const [batchStatus, setBatchStatus] = useState<"in process" | "approved" | "discarded">("in process");
@@ -158,13 +157,8 @@ export default function Processing() {
   useEffect(() => {
     fetchRawInventory();
     fetchBatches();
+    generateBatchNumber().then(setGeneratedBatchNo);
   }, []);
-
-  useEffect(() => {
-    if (batchMode === "system") {
-      generateBatchNumber().then(setGeneratedBatchNo);
-    }
-  }, [batchMode]);
 
   const handleSaveBatch = async () => {
     // Validation
@@ -173,16 +167,6 @@ export default function Processing() {
       toast({
         title: "Error",
         description: "Please add at least one item with quantity",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Validate manual batch number if manual mode selected
-    if (batchMode === "manual" && !manualBatchNo.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a batch number",
         variant: "destructive",
       });
       return;
@@ -200,12 +184,13 @@ export default function Processing() {
     setLoading(true);
     
     try {
-      const batchNo = batchMode === "system" ? await generateBatchNumber() : manualBatchNo;
+      const batchNo = await generateBatchNumber();
       
       // Save batch to Firebase
       const batchesRef = collection(db, "batches");
       await addDoc(batchesRef, {
         batchNo,
+        manualBatchNo: manualBatchNo.trim() || null,
         items: validItems,
         status: batchStatus,
         batchDate,
@@ -252,13 +237,14 @@ export default function Processing() {
 
       // Reset form and refresh data
       setBatchItems([{ rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }]);
-      setBatchMode("system");
       setManualBatchNo("");
       setBatchDate(new Date().toISOString().split('T')[0]);
       setBatchStatus("in process");
       setIsAddRecipeOpen(false);
       await fetchRawInventory();
       await fetchBatches();
+      // Generate new batch number for next batch
+      generateBatchNumber().then(setGeneratedBatchNo);
     } catch (error) {
       console.error("Error saving batch:", error);
       toast({
@@ -370,7 +356,17 @@ export default function Processing() {
   ];
 
   const batchColumns = [
-    { key: "batchNo" as keyof Batch, header: "Batch No." },
+    { 
+      key: "batchNo" as keyof Batch, 
+      header: "System Batch No.",
+    },
+    { 
+      key: "manualBatchNo" as keyof Batch, 
+      header: "Manual Batch No.",
+      render: (item: Batch) => (
+        <span>{item.manualBatchNo || "-"}</span>
+      )
+    },
     { 
       key: "items" as keyof Batch, 
       header: "Materials Used",
@@ -490,36 +486,24 @@ export default function Processing() {
             </DialogHeader>
             <div className="py-4">
               <div className="space-y-6">
-                {/* Batch Number with Manual Entry Toggle */}
+                {/* System Generated Batch Number */}
                 <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <Label className="text-sm font-medium">Batch Number</Label>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="manualMode"
-                        checked={batchMode === "manual"}
-                        onCheckedChange={(checked) => setBatchMode(checked ? "manual" : "system")}
-                      />
-                      <label
-                        htmlFor="manualMode"
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                      >
-                        Add Manual Batch Number
-                      </label>
-                    </div>
+                  <Label className="text-sm font-medium mb-2">System Generated Batch Number</Label>
+                  <div className="p-4 bg-muted rounded-lg">
+                    <p className="text-lg font-semibold">{generatedBatchNo || "Loading..."}</p>
                   </div>
-                  {batchMode === "system" ? (
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-lg font-semibold">{generatedBatchNo || "Loading..."}</p>
-                    </div>
-                  ) : (
-                    <Input
-                      id="manualBatchNo"
-                      value={manualBatchNo}
-                      onChange={(e) => setManualBatchNo(e.target.value)}
-                      placeholder="Enter batch number (e.g., BATCH-001)"
-                    />
-                  )}
+                </div>
+
+                {/* Manual Batch Number */}
+                <div>
+                  <Label htmlFor="manualBatchNo" className="text-sm font-medium">Manual Batch Number (Optional)</Label>
+                  <Input
+                    id="manualBatchNo"
+                    value={manualBatchNo}
+                    onChange={(e) => setManualBatchNo(e.target.value)}
+                    placeholder="Enter manual batch number (e.g., BATCH-001)"
+                    className="mt-2"
+                  />
                 </div>
 
                 {/* Batch Date */}
@@ -652,7 +636,7 @@ export default function Processing() {
               <Button variant="outline" onClick={() => {
                 setIsAddRecipeOpen(false);
                 setBatchItems([{ rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }]);
-                setBatchMode("system");
+
                 setManualBatchNo("");
                 setBatchDate(new Date().toISOString().split("T")[0]);
                 setBatchStatus("in process");
@@ -678,8 +662,12 @@ export default function Processing() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-sm text-muted-foreground">Batch Number</Label>
+                      <Label className="text-sm text-muted-foreground">System Batch Number</Label>
                       <p className="text-lg font-semibold">{selectedBatch.batchNo}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Manual Batch Number</Label>
+                      <p className="text-lg font-semibold">{selectedBatch.manualBatchNo || "-"}</p>
                     </div>
                     <div>
                       <Label className="text-sm text-muted-foreground">Status</Label>

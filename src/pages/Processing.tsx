@@ -486,24 +486,27 @@ export default function Processing() {
             </DialogHeader>
             <div className="py-4">
               <div className="space-y-6">
-                {/* System Generated Batch Number */}
-                <div>
-                  <Label className="text-sm font-medium mb-2">System Generated Batch Number</Label>
-                  <div className="p-4 bg-muted rounded-lg">
-                    <p className="text-lg font-semibold">{generatedBatchNo || "Loading..."}</p>
+                {/* Batch Numbers - Side by Side */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* System Generated Batch Number */}
+                  <div>
+                    <Label className="text-sm font-medium mb-2">System Generated Batch Number</Label>
+                    <div className="p-4 bg-muted rounded-lg">
+                      <p className="text-lg font-semibold">{generatedBatchNo || "Loading..."}</p>
+                    </div>
                   </div>
-                </div>
 
-                {/* Manual Batch Number */}
-                <div>
-                  <Label htmlFor="manualBatchNo" className="text-sm font-medium">Manual Batch Number (Optional)</Label>
-                  <Input
-                    id="manualBatchNo"
-                    value={manualBatchNo}
-                    onChange={(e) => setManualBatchNo(e.target.value)}
-                    placeholder="Enter manual batch number (e.g., BATCH-001)"
-                    className="mt-2"
-                  />
+                  {/* Manual Batch Number */}
+                  <div>
+                    <Label htmlFor="manualBatchNo" className="text-sm font-medium">Manual Batch Number (Optional)</Label>
+                    <Input
+                      id="manualBatchNo"
+                      value={manualBatchNo}
+                      onChange={(e) => setManualBatchNo(e.target.value)}
+                      placeholder="Enter manual batch number"
+                      className="mt-2"
+                    />
+                  </div>
                 </div>
 
                 {/* Batch Date */}

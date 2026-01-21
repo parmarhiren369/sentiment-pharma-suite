@@ -62,6 +62,11 @@ export default function ProcessedInventory() {
 
   // Fetch processed inventory from Firebase
   const fetchProcessedInventory = async () => {
+    if (!db) {
+      console.warn("Firebase not initialized");
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       console.log("Fetching processed inventory from Firebase...");

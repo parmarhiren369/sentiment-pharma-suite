@@ -83,6 +83,10 @@ export default function Processing() {
   const { toast } = useToast();
 
   const fetchRawInventory = async () => {
+    if (!db) {
+      console.warn("Firebase not initialized");
+      return;
+    }
     try {
       const inventoryRef = collection(db, "rawInventory");
       const snapshot = await getDocs(inventoryRef);
@@ -97,6 +101,10 @@ export default function Processing() {
   };
 
   const fetchBatches = async () => {
+    if (!db) {
+      console.warn("Firebase not initialized");
+      return;
+    }
     try {
       const batchesRef = collection(db, "batches");
       const snapshot = await getDocs(batchesRef);
@@ -115,6 +123,10 @@ export default function Processing() {
     const now = new Date();
     const month = now.toLocaleString('en-US', { month: 'short' }).toUpperCase();
     const year = now.getFullYear().toString().slice(-2);
+    
+    if (!db) {
+      return `BTC${month}${year}001`;
+    }
     
     try {
       const batchesRef = collection(db, "batches");
@@ -160,6 +172,15 @@ export default function Processing() {
       toast({
         title: "Error",
         description: "Please enter a batch number",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!db) {
+      toast({
+        title: "Error",
+        description: "Database connection not available",
         variant: "destructive",
       });
       return;

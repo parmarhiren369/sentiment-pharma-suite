@@ -59,6 +59,11 @@ export default function RawInventory() {
 
   // Fetch raw inventory from Firebase
   const fetchRawInventory = async () => {
+    if (!db) {
+      console.warn("Firebase not initialized");
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       console.log("Fetching raw inventory from Firebase...");
@@ -111,6 +116,15 @@ export default function RawInventory() {
       toast({
         title: "Error",
         description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!db) {
+      toast({
+        title: "Error",
+        description: "Database connection not available",
         variant: "destructive",
       });
       return;

@@ -51,7 +51,6 @@ export default function RawInventory() {
     quantity: "",
     unit: "kg",
     location: "",
-    reorderLevel: "",
     status: "Adequate" as "Adequate" | "Low" | "Critical" | "Overstocked",
     supplier: "",
   });
@@ -141,7 +140,6 @@ export default function RawInventory() {
         quantity: formData.quantity,
         unit: formData.unit,
         location: formData.location,
-        reorderLevel: formData.reorderLevel || `${Math.floor(parseInt(formData.quantity) * 0.2)} ${formData.unit}`,
         status: formData.status,
         supplier: formData.supplier,
         lastUpdated: new Date().toISOString().split('T')[0],
@@ -164,7 +162,6 @@ export default function RawInventory() {
         quantity: "",
         unit: "kg",
         location: "",
-        reorderLevel: "",
         status: "Adequate",
         supplier: "",
       });
@@ -395,7 +392,7 @@ export default function RawInventory() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="quantity">Quantity *</Label>
                 <Input
@@ -423,15 +420,6 @@ export default function RawInventory() {
                     <SelectItem value="units">units</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="reorderLevel">Reorder Level</Label>
-                <Input
-                  id="reorderLevel"
-                  value={formData.reorderLevel}
-                  onChange={(e) => setFormData({ ...formData, reorderLevel: e.target.value })}
-                  placeholder="100 kg"
-                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">

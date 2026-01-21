@@ -725,6 +725,7 @@ export default function Processing() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </>
-    );
-  }
+      </div>
+    </>
+  );
+}

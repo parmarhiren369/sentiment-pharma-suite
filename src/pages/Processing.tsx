@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, Timestamp, query, orderBy, limit, updateDoc, doc } from "firebase/firestore";
@@ -453,9 +454,15 @@ export default function Processing() {
 
         {/* Batches Table */}
         <div className="bg-card rounded-xl border border-border overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-border">
-            <h2 className="section-title">Created Batches</h2>
-            <p className="section-subtitle">View all batches created from raw materials</p>
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+            <div>
+              <h2 className="section-title">Created Batches</h2>
+              <p className="section-subtitle">View all batches created from raw materials</p>
+            </div>
+            <Button onClick={() => setIsAddRecipeOpen(true)} className="gap-2">
+              <Plus className="w-4 h-4" />
+              Add Recipe
+            </Button>
           </div>
           <div className="p-6">
             {batches.length > 0 ? (
@@ -475,14 +482,6 @@ export default function Processing() {
           </div>
         </div>
 
-        {/* Add Recipe Button */}
-        <div className="flex justify-center">
-          <Button onClick={() => setIsAddRecipeOpen(true)} size="lg" className="gap-2">
-            <Plus className="w-5 h-5" />
-            Add Recipe
-          </Button>
-        </div>
-
         {/* Add Recipe/Batch Dialog */}
         <Dialog open={isAddRecipeOpen} onOpenChange={setIsAddRecipeOpen}>
           <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
@@ -491,46 +490,37 @@ export default function Processing() {
             </DialogHeader>
             <div className="py-4">
               <div className="space-y-6">
-                {/* Batch Mode Selection */}
+                {/* Batch Number with Manual Entry Toggle */}
                 <div>
-                  <Label className="text-sm font-medium mb-3 block">Batch Number Mode</Label>
-                  <div className="flex gap-4">
-                    <Button
-                      type="button"
-                      variant={batchMode === "system" ? "default" : "outline"}
-                      onClick={() => setBatchMode("system")}
-                      className="flex-1"
-                    >
-                      System Generated Batch No
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={batchMode === "manual" ? "default" : "outline"}
-                      onClick={() => setBatchMode("manual")}
-                      className="flex-1"
-                    >
-                      Manual Batch No
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Batch Number Display/Input */}
-                {batchMode === "system" ? (
-                  <div className="p-4 bg-muted rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
                     <Label className="text-sm font-medium">Batch Number</Label>
-                    <p className="text-lg font-semibold mt-1">{generatedBatchNo || "Loading..."}</p>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="manualMode"
+                        checked={batchMode === "manual"}
+                        onCheckedChange={(checked) => setBatchMode(checked ? "manual" : "system")}
+                      />
+                      <label
+                        htmlFor="manualMode"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        Add Manual Batch Number
+                      </label>
+                    </div>
                   </div>
-                ) : (
-                  <div>
-                    <Label htmlFor="manualBatchNo">Manual Batch Number *</Label>
+                  {batchMode === "system" ? (
+                    <div className="p-4 bg-muted rounded-lg">
+                      <p className="text-lg font-semibold">{generatedBatchNo || "Loading..."}</p>
+                    </div>
+                  ) : (
                     <Input
                       id="manualBatchNo"
                       value={manualBatchNo}
                       onChange={(e) => setManualBatchNo(e.target.value)}
                       placeholder="Enter batch number (e.g., BATCH-001)"
                     />
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* Batch Date */}
                 <div>

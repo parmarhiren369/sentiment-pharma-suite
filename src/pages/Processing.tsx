@@ -82,6 +82,8 @@ export default function Processing() {
   const [batchStatus, setBatchStatus] = useState<"in process" | "approved" | "discarded">("in process");
   const [loading, setLoading] = useState(false);
   const [generatedBatchNo, setGeneratedBatchNo] = useState("");
+  const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
+  const [isBatchDetailOpen, setIsBatchDetailOpen] = useState(false);
   const { toast } = useToast();
 
   const fetchRawInventory = async () => {
@@ -313,6 +315,11 @@ export default function Processing() {
     setBatchItems(newItems);
   };
 
+  const handleBatchClick = (batch: Batch) => {
+    setSelectedBatch(batch);
+    setIsBatchDetailOpen(true);
+  };
+
   const rawMaterialColumns = [
     { key: "name" as keyof RawMaterial, header: "Material Name" },
     { key: "batchNo" as keyof RawMaterial, header: "Batch No." },
@@ -456,6 +463,7 @@ export default function Processing() {
                 data={batches}
                 columns={batchColumns}
                 keyField="id"
+                onRowClick={handleBatchClick}
               />
             ) : (
               <div className="text-center py-12 text-muted-foreground">
@@ -663,6 +671,95 @@ export default function Processing() {
               </Button>
               <Button onClick={handleSaveBatch} disabled={loading}>
                 {loading ? "Saving..." : "Save Batch"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Batch Detail Dialog */}
+        <Dialog open={isBatchDetailOpen} onOpenChange={setIsBatchDetailOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Batch Details</DialogTitle>
+            </DialogHeader>
+            {selectedBatch && (
+              <div className="py-4 space-y-6">
+                {/* Batch Information */}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Batch Number</Label>
+                      <p className="text-lg font-semibold">{selectedBatch.batchNo}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Status</Label>
+                      <div className="mt-1">
+                        <span className={`badge-type ${
+                          selectedBatch.status === "approved" ? "badge-processed" : 
+                          selectedBatch.status === "discarded" ? "bg-destructive/20 text-destructive" : 
+                          "bg-warning/20 text-warning"
+                        }`}>
+                          {selectedBatch.status === "approved" ? "Approved" : 
+                           selectedBatch.status === "discarded" ? "Discarded" : "In Process"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Created Date</Label>
+                    <p className="text-base font-medium">{new Date(selectedBatch.createdAt).toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}</p>
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-border" />
+
+                {/* Materials Used */}
+                <div>
+                  <Label className="text-sm font-medium mb-3 block">Raw Materials Used</Label>
+                  <div className="space-y-3">
+                    {selectedBatch.items.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                        <div>
+                          <p className="font-medium">{item.rawItemName}</p>
+                          <p className="text-sm text-muted-foreground">Available: {item.currentQuantity} {item.unit}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-primary">{item.useQuantity} {item.unit}</p>
+                          <p className="text-xs text-muted-foreground">Used</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Summary */}
+                <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
+                  <h4 className="font-semibold text-sm mb-2">Batch Summary</h4>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total Materials:</span>
+                      <span className="font-medium">{selectedBatch.items.length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total Quantity Used:</span>
+                      <span className="font-medium">
+                        {selectedBatch.items.reduce((sum, item) => sum + item.useQuantity, 0).toFixed(2)} {selectedBatch.items[0]?.unit || 'units'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsBatchDetailOpen(false)}>
+                Close
               </Button>
             </DialogFooter>
           </DialogContent>

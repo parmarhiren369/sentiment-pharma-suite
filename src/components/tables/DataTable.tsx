@@ -10,9 +10,10 @@ interface DataTableProps<T> {
   data: T[];
   columns: Column<T>[];
   keyField: keyof T;
+  onRowClick?: (item: T) => void;
 }
 
-export function DataTable<T>({ data, columns, keyField }: DataTableProps<T>) {
+export function DataTable<T>({ data, columns, keyField, onRowClick }: DataTableProps<T>) {
   const getCellValue = (item: T, column: Column<T>): ReactNode => {
     if (column.render) {
       return column.render(item);
@@ -33,7 +34,11 @@ export function DataTable<T>({ data, columns, keyField }: DataTableProps<T>) {
         </thead>
         <tbody>
           {data.map((item) => (
-            <tr key={String(item[keyField])}>
+            <tr 
+              key={String(item[keyField])}
+              onClick={() => onRowClick?.(item)}
+              className={onRowClick ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}
+            >
               {columns.map((column) => (
                 <td key={String(column.key)}>{getCellValue(item, column)}</td>
               ))}

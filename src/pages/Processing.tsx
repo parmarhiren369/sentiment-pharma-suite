@@ -42,20 +42,9 @@ interface ProcessedMaterial {
   yield: string;
 }
 
-const rawMaterialsData: RawMaterial[] = [
-  { id: "RM001", name: "Paracetamol API", batchNo: "PCM-2024-001", quantity: "500 kg", status: "In Stock", supplier: "ChemPharma Ltd", expiryDate: "2026-03-15" },
-  { id: "RM002", name: "Microcrystalline Cellulose", batchNo: "MCC-2024-012", quantity: "200 kg", status: "Low Stock", supplier: "ExciPure Inc", expiryDate: "2027-01-20" },
-  { id: "RM003", name: "Magnesium Stearate", batchNo: "MGS-2024-008", quantity: "50 kg", status: "Processing", supplier: "PharmaChem Co", expiryDate: "2026-08-10" },
-  { id: "RM004", name: "Lactose Monohydrate", batchNo: "LAC-2024-003", quantity: "300 kg", status: "In Stock", supplier: "DairyPharma", expiryDate: "2026-12-01" },
-  { id: "RM005", name: "Sodium Starch Glycolate", batchNo: "SSG-2024-007", quantity: "100 kg", status: "In Stock", supplier: "StarchTech Ltd", expiryDate: "2027-05-22" },
-];
+const rawMaterialsData: RawMaterial[] = [];
 
-const processedMaterialsData: ProcessedMaterial[] = [
-  { id: "PM001", name: "Paracetamol 500mg Tablets", batchNo: "TAB-2024-101", quantity: "50,000 units", processDate: "2024-01-10", status: "Completed", yield: "98.5%" },
-  { id: "PM002", name: "Ibuprofen 400mg Tablets", batchNo: "TAB-2024-102", quantity: "30,000 units", processDate: "2024-01-12", status: "Quality Check", yield: "97.2%" },
-  { id: "PM003", name: "Amoxicillin 250mg Capsules", batchNo: "CAP-2024-045", quantity: "25,000 units", processDate: "2024-01-14", status: "In Progress", yield: "95.8%" },
-  { id: "PM004", name: "Omeprazole 20mg Capsules", batchNo: "CAP-2024-046", quantity: "40,000 units", processDate: "2024-01-15", status: "Completed", yield: "99.1%" },
-];
+const processedMaterialsData: ProcessedMaterial[] = [];
 
 export default function Processing() {
   const [activeTab, setActiveTab] = useState<"raw" | "processed">("raw");
@@ -205,7 +194,7 @@ export default function Processing() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
             title="Total Raw Materials"
-            value={85}
+            value={rawMaterials.length + rawMaterialsData.length}
             change="+12%"
             changeType="positive"
             icon={Package}
@@ -214,7 +203,7 @@ export default function Processing() {
           />
           <StatCard
             title="Active Batches"
-            value={24}
+            value={processedMaterialsData.filter(m => m.status === "In Progress").length}
             change="+8%"
             changeType="positive"
             icon={FlaskConical}
@@ -223,7 +212,7 @@ export default function Processing() {
           />
           <StatCard
             title="Quality Checks"
-            value={12}
+            value={processedMaterialsData.filter(m => m.status === "Quality Check").length}
             change="+5%"
             changeType="positive"
             icon={Beaker}
@@ -232,7 +221,7 @@ export default function Processing() {
           />
           <StatCard
             title="Completed Today"
-            value={8}
+            value={processedMaterialsData.filter(m => m.status === "Completed").length}
             change="+15%"
             changeType="positive"
             icon={CheckCircle2}

@@ -42,20 +42,9 @@ interface Meeting {
   representative: string;
 }
 
-const doctors: Doctor[] = [
-  { id: "D001", name: "Dr. Rajesh Sharma", specialization: "General Physician", hospital: "Apollo Hospital", city: "Mumbai", phone: "+91 98765 43210", email: "rajesh.sharma@apollo.com", status: "Active", lastVisit: "2024-01-14", prescriptions: 145 },
-  { id: "D002", name: "Dr. Priya Patel", specialization: "Cardiologist", hospital: "Fortis Healthcare", city: "Delhi", phone: "+91 98765 43211", email: "priya.patel@fortis.com", status: "Active", lastVisit: "2024-01-13", prescriptions: 89 },
-  { id: "D003", name: "Dr. Amit Kumar", specialization: "Orthopedic", hospital: "Max Hospital", city: "Bangalore", phone: "+91 98765 43212", email: "amit.kumar@max.com", status: "New", lastVisit: "2024-01-15", prescriptions: 12 },
-  { id: "D004", name: "Dr. Sneha Reddy", specialization: "Pediatrician", hospital: "Rainbow Hospital", city: "Hyderabad", phone: "+91 98765 43213", email: "sneha.reddy@rainbow.com", status: "Active", lastVisit: "2024-01-12", prescriptions: 210 },
-  { id: "D005", name: "Dr. Mohammed Ali", specialization: "Neurologist", hospital: "NIMHANS", city: "Bangalore", phone: "+91 98765 43214", email: "mohammed.ali@nimhans.com", status: "Inactive", lastVisit: "2024-01-01", prescriptions: 56 },
-];
+const doctors: Doctor[] = [];
 
-const meetings: Meeting[] = [
-  { id: "M001", doctorName: "Dr. Rajesh Sharma", purpose: "Product Introduction - Paracetamol Plus", date: "2024-01-16", time: "10:30 AM", location: "Apollo Hospital, Mumbai", status: "Scheduled", representative: "Rahul Verma" },
-  { id: "M002", doctorName: "Dr. Priya Patel", purpose: "Follow-up on Cardiac Range", date: "2024-01-15", time: "2:00 PM", location: "Fortis Healthcare, Delhi", status: "Completed", representative: "Sneha Gupta" },
-  { id: "M003", doctorName: "Dr. Amit Kumar", purpose: "New Doctor Onboarding", date: "2024-01-17", time: "11:00 AM", location: "Max Hospital, Bangalore", status: "Scheduled", representative: "Vikram Singh" },
-  { id: "M004", doctorName: "Dr. Sneha Reddy", purpose: "Pediatric Range Discussion", date: "2024-01-14", time: "3:30 PM", location: "Rainbow Hospital, Hyderabad", status: "Completed", representative: "Priya Menon" },
-];
+const meetings: Meeting[] = [];
 
 export default function Doctors() {
   const [activeTab, setActiveTab] = useState<TabType>("all");
@@ -174,7 +163,7 @@ export default function Doctors() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
             title="Total Doctors"
-            value={156}
+            value={doctors.length}
             change="+12"
             changeType="positive"
             icon={Stethoscope}
@@ -183,7 +172,7 @@ export default function Doctors() {
           />
           <StatCard
             title="Active Doctors"
-            value={128}
+            value={activeDoctors.length}
             change="+8%"
             changeType="positive"
             icon={Users}
@@ -192,7 +181,7 @@ export default function Doctors() {
           />
           <StatCard
             title="Meetings This Week"
-            value={24}
+            value={meetings.length}
             change="+5"
             changeType="positive"
             icon={Calendar}
@@ -201,7 +190,7 @@ export default function Doctors() {
           />
           <StatCard
             title="Total Prescriptions"
-            value="1.2K"
+            value={doctors.reduce((sum, d) => sum + d.prescriptions, 0)}
             change="+15%"
             changeType="positive"
             icon={MessageSquare}
@@ -281,18 +270,34 @@ export default function Doctors() {
         <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-card rounded-xl border border-border p-6">
             <h3 className="text-sm font-medium text-muted-foreground mb-2">Top Prescriber</h3>
-            <p className="text-lg font-bold text-foreground">Dr. Sneha Reddy</p>
-            <p className="text-sm text-primary mt-1">210 prescriptions this month</p>
+            <p className="text-lg font-bold text-foreground">
+              {doctors.length > 0 
+                ? doctors.reduce((prev, current) => (prev.prescriptions > current.prescriptions ? prev : current)).name 
+                : "N/A"}
+            </p>
+            <p className="text-sm text-primary mt-1">
+              {doctors.length > 0 
+                ? `${Math.max(...doctors.map(d => d.prescriptions))} prescriptions this month` 
+                : "No data"}
+            </p>
           </div>
           <div className="bg-card rounded-xl border border-border p-6">
             <h3 className="text-sm font-medium text-muted-foreground mb-2">New Doctors Added</h3>
-            <p className="text-3xl font-bold text-foreground">12</p>
+            <p className="text-3xl font-bold text-foreground">
+              {doctors.filter(d => d.status === "New").length}
+            </p>
             <p className="text-sm text-success mt-1">This month</p>
           </div>
           <div className="bg-card rounded-xl border border-border p-6">
             <h3 className="text-sm font-medium text-muted-foreground mb-2">Meeting Success Rate</h3>
-            <p className="text-3xl font-bold text-foreground">94%</p>
-            <p className="text-sm text-success mt-1">+5% from last month</p>
+            <p className="text-3xl font-bold text-foreground">
+              {meetings.length > 0 
+                ? `${Math.round((meetings.filter(m => m.status === "Completed").length / meetings.length) * 100)}%` 
+                : "N/A"}
+            </p>
+            <p className="text-sm text-success mt-1">
+              {meetings.filter(m => m.status === "Completed").length} completed
+            </p>
           </div>
         </div>
       </div>

@@ -37,14 +37,7 @@ interface ProcessedInventoryItem {
   lastUpdated: string;
 }
 
-const processedInventory: ProcessedInventoryItem[] = [
-  { id: "PI001", name: "Paracetamol Granules", category: "Intermediate", quantity: "200", unit: "kg", location: "Production Bay 1", reorderLevel: "50 kg", status: "Adequate", batchNo: "PG-2024-001", processedDate: "2024-01-10", lastUpdated: "2024-01-15" },
-  { id: "PI002", name: "Ibuprofen Blend", category: "Intermediate", quantity: "150", unit: "kg", location: "Production Bay 2", reorderLevel: "75 kg", status: "Adequate", batchNo: "IB-2024-012", processedDate: "2024-01-12", lastUpdated: "2024-01-14" },
-  { id: "PI003", name: "Amoxicillin Powder", category: "Intermediate", quantity: "30", unit: "kg", location: "Production Bay 1", reorderLevel: "40 kg", status: "Low", batchNo: "AP-2024-008", processedDate: "2024-01-13", lastUpdated: "2024-01-15" },
-  { id: "PI004", name: "Omeprazole Granules", category: "Intermediate", quantity: "180", unit: "kg", location: "Production Bay 3", reorderLevel: "60 kg", status: "Adequate", batchNo: "OG-2024-015", processedDate: "2024-01-14", lastUpdated: "2024-01-15" },
-  { id: "PI005", name: "Cetirizine Blend", category: "Intermediate", quantity: "95", unit: "kg", location: "Production Bay 2", reorderLevel: "50 kg", status: "Adequate", batchNo: "CB-2024-020", processedDate: "2024-01-11", lastUpdated: "2024-01-14" },
-  { id: "PI006", name: "Metformin Granules", category: "Intermediate", quantity: "25", unit: "kg", location: "Production Bay 1", reorderLevel: "45 kg", status: "Critical", batchNo: "MG-2024-005", processedDate: "2024-01-09", lastUpdated: "2024-01-15" },
-];
+const processedInventory: ProcessedInventoryItem[] = [];
 
 export default function ProcessedInventory() {
   const [processedInventoryData, setProcessedInventoryData] = useState<ProcessedInventoryItem[]>([]);
@@ -101,7 +94,7 @@ export default function ProcessedInventory() {
   }, []);
 
   // Combine static data with Firebase data
-  const allInventoryData = [...processedInventoryData, ...processedInventory];
+  const allInventoryData = processedInventoryData;
 
   // Filter data based on search and date range
   const filteredData = allInventoryData.filter((item) => {
@@ -227,7 +220,7 @@ export default function ProcessedInventory() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
             title="Processed Materials"
-            value={89}
+            value={allInventoryData.length}
             change="+12%"
             changeType="positive"
             icon={Boxes}
@@ -236,7 +229,7 @@ export default function ProcessedInventory() {
           />
           <StatCard
             title="Ready for Production"
-            value={67}
+            value={allInventoryData.filter(item => item.status === "Adequate" || item.status === "Overstocked").length}
             change="+15%"
             changeType="positive"
             icon={CheckCircle2}
@@ -244,17 +237,17 @@ export default function ProcessedInventory() {
             iconColor="text-success"
           />
           <StatCard
-            title="In Production"
-            value={18}
+            title="Low Stock"
+            value={allInventoryData.filter(item => item.status === "Low" || item.status === "Critical").length}
             change="+3"
-            changeType="positive"
+            changeType="negative"
             icon={Activity}
-            iconBgColor="bg-info/20"
-            iconColor="text-info"
+            iconBgColor="bg-warning/20"
+            iconColor="text-warning"
           />
           <StatCard
-            title="Average Yield"
-            value="97.6%"
+            title="Total Quantity"
+            value={allInventoryData.reduce((sum, item) => sum + parseInt(item.quantity), 0)}
             change="+0.8%"
             changeType="positive"
             icon={TrendingUp}

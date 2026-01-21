@@ -38,25 +38,11 @@ interface FinishedGoods {
   status: "In Stock" | "Dispatched" | "Reserved";
 }
 
-const rawInventory: InventoryItem[] = [
-  { id: "RI001", name: "Paracetamol API", category: "Active Ingredient", quantity: "500", unit: "kg", location: "Warehouse A", reorderLevel: "100 kg", status: "Adequate", lastUpdated: "2024-01-15" },
-  { id: "RI002", name: "Microcrystalline Cellulose", category: "Excipient", quantity: "75", unit: "kg", location: "Warehouse B", reorderLevel: "100 kg", status: "Low", lastUpdated: "2024-01-14" },
-  { id: "RI003", name: "Magnesium Stearate", category: "Lubricant", quantity: "25", unit: "kg", location: "Warehouse A", reorderLevel: "50 kg", status: "Critical", lastUpdated: "2024-01-15" },
-  { id: "RI004", name: "Lactose Monohydrate", category: "Filler", quantity: "800", unit: "kg", location: "Warehouse C", reorderLevel: "200 kg", status: "Overstocked", lastUpdated: "2024-01-13" },
-];
+const rawInventory: InventoryItem[] = [];
 
-const processedInventory: InventoryItem[] = [
-  { id: "PI001", name: "Paracetamol Granules", category: "Intermediate", quantity: "200", unit: "kg", location: "Production Bay 1", reorderLevel: "50 kg", status: "Adequate", lastUpdated: "2024-01-15" },
-  { id: "PI002", name: "Ibuprofen Blend", category: "Intermediate", quantity: "150", unit: "kg", location: "Production Bay 2", reorderLevel: "75 kg", status: "Adequate", lastUpdated: "2024-01-14" },
-  { id: "PI003", name: "Amoxicillin Powder", category: "Intermediate", quantity: "30", unit: "kg", location: "Production Bay 1", reorderLevel: "40 kg", status: "Low", lastUpdated: "2024-01-15" },
-];
+const processedInventory: InventoryItem[] = [];
 
-const finishedGoods: FinishedGoods[] = [
-  { id: "FG001", productName: "Paracetamol 500mg Tablets", batchNo: "TAB-2024-101", rawMaterialUsed: "Paracetamol API, MCC, Lactose", processedFrom: "Paracetamol Granules", outputQuantity: "50,000 units", productionDate: "2024-01-10", status: "In Stock" },
-  { id: "FG002", productName: "Ibuprofen 400mg Tablets", batchNo: "TAB-2024-102", rawMaterialUsed: "Ibuprofen API, Starch, MCC", processedFrom: "Ibuprofen Blend", outputQuantity: "30,000 units", productionDate: "2024-01-12", status: "Reserved" },
-  { id: "FG003", productName: "Amoxicillin 250mg Capsules", batchNo: "CAP-2024-045", rawMaterialUsed: "Amoxicillin API, Lactose", processedFrom: "Amoxicillin Powder", outputQuantity: "25,000 units", productionDate: "2024-01-14", status: "Dispatched" },
-  { id: "FG004", productName: "Omeprazole 20mg Capsules", batchNo: "CAP-2024-046", rawMaterialUsed: "Omeprazole API, MCC, Talc", processedFrom: "Omeprazole Granules", outputQuantity: "40,000 units", productionDate: "2024-01-15", status: "In Stock" },
-];
+const finishedGoods: FinishedGoods[] = [];
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState<TabType>("raw");
@@ -136,7 +122,7 @@ export default function Inventory() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
             title="Raw Materials"
-            value={156}
+            value={rawInventory.length}
             change="+5%"
             changeType="positive"
             icon={Package}
@@ -145,7 +131,7 @@ export default function Inventory() {
           />
           <StatCard
             title="Processed Items"
-            value={89}
+            value={processedInventory.length}
             change="+12%"
             changeType="positive"
             icon={Boxes}
@@ -154,7 +140,7 @@ export default function Inventory() {
           />
           <StatCard
             title="Finished Goods"
-            value="145K"
+            value={finishedGoods.length}
             change="+18%"
             changeType="positive"
             icon={PackageCheck}
@@ -163,7 +149,8 @@ export default function Inventory() {
           />
           <StatCard
             title="Low Stock Alerts"
-            value={8}
+            value={rawInventory.filter(item => item.status === "Low" || item.status === "Critical").length + 
+                   processedInventory.filter(item => item.status === "Low" || item.status === "Critical").length}
             change="-3"
             changeType="negative"
             icon={AlertTriangle}
@@ -240,22 +227,26 @@ export default function Inventory() {
         </div>
 
         {/* Finished Goods Summary */}
-        {activeTab === "finished" && (
+        {activeTab === "finished" && finishedGoods.length > 0 && (
           <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-card rounded-xl border border-border p-6">
               <h3 className="text-sm font-medium text-muted-foreground mb-2">Total Output This Month</h3>
-              <p className="text-3xl font-bold text-foreground">145,000</p>
-              <p className="text-sm text-success mt-1">+18% from last month</p>
+              <p className="text-3xl font-bold text-foreground">
+                {finishedGoods.reduce((sum, item) => sum + parseInt(item.outputQuantity.replace(/[^0-9]/g, '')), 0).toLocaleString()}
+              </p>
+              <p className="text-sm text-success mt-1">units produced</p>
             </div>
             <div className="bg-card rounded-xl border border-border p-6">
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">Average Yield Rate</h3>
-              <p className="text-3xl font-bold text-foreground">97.6%</p>
-              <p className="text-sm text-success mt-1">+0.8% improvement</p>
-            </div>
-            <div className="bg-card rounded-xl border border-border p-6">
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">Batches Completed</h3>
-              <p className="text-3xl font-bold text-foreground">24</p>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">Total Batches</h3>
+              <p className="text-3xl font-bold text-foreground">{finishedGoods.length}</p>
               <p className="text-sm text-success mt-1">All quality approved</p>
+            </div>
+            <div className="bg-card rounded-xl border border-border p-6">
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">In Stock</h3>
+              <p className="text-3xl font-bold text-foreground">
+                {finishedGoods.filter(item => item.status === "In Stock").length}
+              </p>
+              <p className="text-sm text-success mt-1">Ready for dispatch</p>
             </div>
           </div>
         )}

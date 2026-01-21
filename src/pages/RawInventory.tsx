@@ -36,15 +36,7 @@ interface RawInventoryItem {
   lastUpdated: string;
 }
 
-const rawInventory: RawInventoryItem[] = [
-  { id: "RI001", name: "Paracetamol API", category: "Active Ingredient", quantity: "500", unit: "kg", location: "Warehouse A", reorderLevel: "100 kg", status: "Adequate", supplier: "ChemPharma Ltd", lastUpdated: "2024-01-15" },
-  { id: "RI002", name: "Microcrystalline Cellulose", category: "Excipient", quantity: "75", unit: "kg", location: "Warehouse B", reorderLevel: "100 kg", status: "Low", supplier: "ExciPure Inc", lastUpdated: "2024-01-14" },
-  { id: "RI003", name: "Magnesium Stearate", category: "Lubricant", quantity: "25", unit: "kg", location: "Warehouse A", reorderLevel: "50 kg", status: "Critical", supplier: "PharmaChem Co", lastUpdated: "2024-01-15" },
-  { id: "RI004", name: "Lactose Monohydrate", category: "Filler", quantity: "800", unit: "kg", location: "Warehouse C", reorderLevel: "200 kg", status: "Overstocked", supplier: "DairyPharma", lastUpdated: "2024-01-13" },
-  { id: "RI005", name: "Sodium Starch Glycolate", category: "Disintegrant", quantity: "120", unit: "kg", location: "Warehouse B", reorderLevel: "50 kg", status: "Adequate", supplier: "StarchTech Ltd", lastUpdated: "2024-01-15" },
-  { id: "RI006", name: "Ibuprofen API", category: "Active Ingredient", quantity: "350", unit: "kg", location: "Warehouse A", reorderLevel: "100 kg", status: "Adequate", supplier: "ChemPharma Ltd", lastUpdated: "2024-01-14" },
-  { id: "RI007", name: "Croscarmellose Sodium", category: "Disintegrant", quantity: "45", unit: "kg", location: "Warehouse B", reorderLevel: "60 kg", status: "Low", supplier: "ExciPure Inc", lastUpdated: "2024-01-15" },
-];
+const rawInventory: RawInventoryItem[] = [];
 
 export default function RawInventory() {
   const [rawInventoryData, setRawInventoryData] = useState<RawInventoryItem[]>([]);
@@ -100,7 +92,7 @@ export default function RawInventory() {
   }, []);
 
   // Combine static data with Firebase data
-  const allInventoryData = [...rawInventoryData, ...rawInventory];
+  const allInventoryData = rawInventoryData;
 
   // Filter data based on search and date range
   const filteredData = allInventoryData.filter((item) => {
@@ -223,7 +215,7 @@ export default function RawInventory() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
             title="Total Raw Materials"
-            value={156}
+            value={allInventoryData.length}
             change="+5%"
             changeType="positive"
             icon={Package}
@@ -232,7 +224,7 @@ export default function RawInventory() {
           />
           <StatCard
             title="Adequate Stock"
-            value={124}
+            value={allInventoryData.filter(item => item.status === "Adequate" || item.status === "Overstocked").length}
             change="+8%"
             changeType="positive"
             icon={CheckCircle2}
@@ -241,7 +233,7 @@ export default function RawInventory() {
           />
           <StatCard
             title="Low Stock Items"
-            value={24}
+            value={allInventoryData.filter(item => item.status === "Low").length}
             change="-3"
             changeType="positive"
             icon={TrendingUp}
@@ -250,7 +242,7 @@ export default function RawInventory() {
           />
           <StatCard
             title="Critical Alerts"
-            value={8}
+            value={allInventoryData.filter(item => item.status === "Critical").length}
             change="-2"
             changeType="positive"
             icon={AlertTriangle}

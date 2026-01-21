@@ -39,21 +39,9 @@ interface Invoice {
   status: "Paid" | "Pending" | "Overdue";
 }
 
-const transactions: Transaction[] = [
-  { id: "T001", description: "Sale - Paracetamol Tablets", category: "Product Sales", amount: "₹2,45,000", type: "Income", date: "2024-01-15", status: "Completed", reference: "INV-2024-001" },
-  { id: "T002", description: "Raw Material Purchase - API", category: "Procurement", amount: "₹1,20,000", type: "Expense", date: "2024-01-14", status: "Completed", reference: "PO-2024-045" },
-  { id: "T003", description: "Sale - Ibuprofen Tablets", category: "Product Sales", amount: "₹1,85,000", type: "Income", date: "2024-01-13", status: "Completed", reference: "INV-2024-002" },
-  { id: "T004", description: "Equipment Maintenance", category: "Operations", amount: "₹35,000", type: "Expense", date: "2024-01-12", status: "Pending", reference: "MNT-2024-012" },
-  { id: "T005", description: "Packaging Material", category: "Procurement", amount: "₹45,000", type: "Expense", date: "2024-01-11", status: "Completed", reference: "PO-2024-046" },
-  { id: "T006", description: "Sale - Amoxicillin Capsules", category: "Product Sales", amount: "₹3,20,000", type: "Income", date: "2024-01-10", status: "Completed", reference: "INV-2024-003" },
-];
+const transactions: Transaction[] = [];
 
-const invoices: Invoice[] = [
-  { id: "I001", invoiceNo: "INV-2024-001", customer: "Apollo Pharmacy", amount: "₹2,45,000", issueDate: "2024-01-15", dueDate: "2024-02-15", status: "Pending" },
-  { id: "I002", invoiceNo: "INV-2024-002", customer: "MedPlus Health", amount: "₹1,85,000", issueDate: "2024-01-13", dueDate: "2024-02-13", status: "Paid" },
-  { id: "I003", invoiceNo: "INV-2024-003", customer: "Fortis Hospital", amount: "₹3,20,000", issueDate: "2024-01-10", dueDate: "2024-02-10", status: "Paid" },
-  { id: "I004", invoiceNo: "INV-2024-004", customer: "Max Healthcare", amount: "₹4,50,000", issueDate: "2024-01-08", dueDate: "2024-02-08", status: "Overdue" },
-];
+const invoices: Invoice[] = [];
 
 export default function Accounting() {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
@@ -142,7 +130,7 @@ export default function Accounting() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
             title="Total Revenue"
-            value="₹12.5L"
+            value={`₹${(incomeTransactions.reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₹,]/g, '')), 0) / 100000).toFixed(1)}L`}
             change="+15%"
             changeType="positive"
             icon={DollarSign}
@@ -151,7 +139,7 @@ export default function Accounting() {
           />
           <StatCard
             title="Total Expenses"
-            value="₹4.2L"
+            value={`₹${(expenseTransactions.reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₹,]/g, '')), 0) / 100000).toFixed(1)}L`}
             change="+8%"
             changeType="negative"
             icon={CreditCard}
@@ -160,7 +148,8 @@ export default function Accounting() {
           />
           <StatCard
             title="Net Profit"
-            value="₹8.3L"
+            value={`₹${((incomeTransactions.reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₹,]/g, '')), 0) - 
+                          expenseTransactions.reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₹,]/g, '')), 0)) / 100000).toFixed(1)}L`}
             change="+22%"
             changeType="positive"
             icon={Wallet}
@@ -169,8 +158,8 @@ export default function Accounting() {
           />
           <StatCard
             title="Pending Invoices"
-            value="₹6.95L"
-            change="5 invoices"
+            value={`₹${(invoices.filter(i => i.status === "Pending" || i.status === "Overdue").reduce((sum, i) => sum + parseFloat(i.amount.replace(/[₹,]/g, '')), 0) / 100000).toFixed(2)}L`}
+            change={`${invoices.filter(i => i.status === "Pending" || i.status === "Overdue").length} invoices`}
             changeType="neutral"
             icon={PiggyBank}
             iconBgColor="bg-warning/20"
@@ -258,24 +247,36 @@ export default function Accounting() {
               <h3 className="text-sm font-medium text-muted-foreground">This Month</h3>
               <TrendingUp className="w-5 h-5 text-success" />
             </div>
-            <p className="text-3xl font-bold text-foreground">₹7.5L</p>
-            <p className="text-sm text-success mt-1">+18% from last month</p>
+            <p className="text-3xl font-bold text-foreground">
+              {incomeTransactions.length > 0 
+                ? `₹${(incomeTransactions.reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₹,]/g, '')), 0) / 100000).toFixed(1)}L`
+                : "₹0"}
+            </p>
+            <p className="text-sm text-success mt-1">{incomeTransactions.length} transactions</p>
           </div>
           <div className="bg-card rounded-xl border border-border p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-muted-foreground">This Quarter</h3>
-              <TrendingUp className="w-5 h-5 text-success" />
+              <h3 className="text-sm font-medium text-muted-foreground">Total Expenses</h3>
+              <TrendingDown className="w-5 h-5 text-destructive" />
             </div>
-            <p className="text-3xl font-bold text-foreground">₹22.8L</p>
-            <p className="text-sm text-success mt-1">+25% from last quarter</p>
+            <p className="text-3xl font-bold text-foreground">
+              {expenseTransactions.length > 0 
+                ? `₹${(expenseTransactions.reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₹,]/g, '')), 0) / 100000).toFixed(1)}L`
+                : "₹0"}
+            </p>
+            <p className="text-sm text-destructive mt-1">{expenseTransactions.length} transactions</p>
           </div>
           <div className="bg-card rounded-xl border border-border p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-muted-foreground">Year to Date</h3>
-              <TrendingUp className="w-5 h-5 text-success" />
+              <h3 className="text-sm font-medium text-muted-foreground">Outstanding</h3>
+              <Receipt className="w-5 h-5 text-warning" />
             </div>
-            <p className="text-3xl font-bold text-foreground">₹1.2Cr</p>
-            <p className="text-sm text-success mt-1">On track for targets</p>
+            <p className="text-3xl font-bold text-foreground">
+              {invoices.filter(i => i.status !== "Paid").length > 0 
+                ? `₹${(invoices.filter(i => i.status !== "Paid").reduce((sum, i) => sum + parseFloat(i.amount.replace(/[₹,]/g, '')), 0) / 100000).toFixed(1)}L`
+                : "₹0"}
+            </p>
+            <p className="text-sm text-warning mt-1">{invoices.filter(i => i.status !== "Paid").length} pending invoices</p>
           </div>
         </div>
       </div>

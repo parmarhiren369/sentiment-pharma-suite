@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
-import { QuickActionCard } from "@/components/cards/QuickActionCard";
 import { DataTable } from "@/components/tables/DataTable";
 import { 
   FlaskConical, 
@@ -9,11 +8,7 @@ import {
   Beaker, 
   CheckCircle2,
   Plus,
-  FileText,
-  TrendingUp,
-  ArrowRight,
-  Trash2,
-  X
+  Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -382,6 +377,43 @@ export default function Processing() {
     },
   ];
 
+  const batchColumns = [
+    { key: "batchNo" as keyof Batch, header: "Batch No." },
+    { 
+      key: "items" as keyof Batch, 
+      header: "Materials Used",
+      render: (item: Batch) => (
+        <div className="text-sm">
+          {item.items.map((batchItem, idx) => (
+            <div key={idx} className="text-muted-foreground">
+              {batchItem.rawItemName}: {batchItem.useQuantity} {batchItem.unit}
+            </div>
+          ))}
+        </div>
+      )
+    },
+    { 
+      key: "status" as keyof Batch, 
+      header: "Status",
+      render: (item: Batch) => (
+        <span className={`badge-type ${
+          item.status === "Completed" ? "badge-processed" : 
+          item.status === "In Progress" ? "badge-raw" : 
+          "bg-warning/20 text-warning"
+        }`}>
+          {item.status}
+        </span>
+      )
+    },
+    { 
+      key: "createdAt" as keyof Batch, 
+      header: "Created At",
+      render: (item: Batch) => (
+        <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+      )
+    },
+  ];
+
   return (
     <>
       <AppHeader title="Processing Dashboard" subtitle="Manage raw materials and processed products" />
@@ -427,98 +459,77 @@ export default function Processing() {
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Main Content */}
-          <div className="lg:col-span-3">
-            {/* Tabs */}
-            <div className="bg-card rounded-xl border border-border overflow-hidden">
-              <div className="flex border-b border-border">
-                <button
-                  onClick={() => setActiveTab("raw")}
-                  className={`tab-item ${activeTab === "raw" ? "tab-item-active" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  <Package className="w-4 h-4 inline mr-2" />
-                  Raw Materials
-                </button>
-                <button
-                  onClick={() => setActiveTab("processed")}
-                  className={`tab-item ${activeTab === "processed" ? "tab-item-active" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  <FlaskConical className="w-4 h-4 inline mr-2" />
-                  Processed Materials
-                </button>
-              </div>
-
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="section-title">
-                      {activeTab === "raw" ? "Raw Material Inventory" : "Processed Products"}
-                    </h2>
-                    <p className="section-subtitle">
-                      {activeTab === "raw" 
-                        ? "Track and manage incoming raw materials" 
-                        : "Monitor production batches and yields"}
-                    </p>
-                  </div>
-                  <Button className="gap-2">
-                    View All <ArrowRight className="w-4 h-4" />
-                  </Button>
-                </div>
-
-{activeTab === "raw" ? (
-                    <DataTable
-                      data={[...rawMaterials, ...rawMaterialsData]}
-                      columns={rawMaterialColumns}
-                      keyField="id"
-                    />
-                  ) : (
-                  <DataTable
-                    data={processedMaterialsData}
-                    columns={processedMaterialColumns}
-                    keyField="id"
-                  />
-                )}
-              </div>
+        {/* Main Content */}
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border px-6 py-4">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveTab("raw")}
+                className={`tab-item ${activeTab === "raw" ? "tab-item-active" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <Package className="w-4 h-4 inline mr-2" />
+                Raw Materials
+              </button>
+              <button
+                onClick={() => setActiveTab("processed")}
+                className={`tab-item ${activeTab === "processed" ? "tab-item-active" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <FlaskConical className="w-4 h-4 inline mr-2" />
+                Processed Materials
+              </button>
             </div>
+            <Button onClick={() => setIsAddRecipeOpen(true)} className="gap-2">
+              <Plus className="w-4 h-4" />
+              Add Recipe
+            </Button>
           </div>
 
-          {/* Quick Actions Sidebar */}
-          <div className="space-y-6">
-            <div className="bg-card rounded-xl border border-border p-6">
-              <h3 className="section-title mb-4">Quick Actions</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <QuickActionCard title="Add Recipe" icon={FlaskConical} onClick={() => setIsAddRecipeOpen(true)} />
-                <QuickActionCard title="Add Material" icon={Plus} onClick={() => setIsAddMaterialOpen(true)} />
-                <QuickActionCard title="Reports" icon={FileText} />
-                <QuickActionCard title="Analytics" icon={TrendingUp} />
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="section-title">
+                  {activeTab === "raw" ? "Raw Material Inventory" : "Processed Products"}
+                </h2>
+                <p className="section-subtitle">
+                  {activeTab === "raw" 
+                    ? "Track and manage incoming raw materials" 
+                    : "Monitor production batches and yields"}
+                </p>
               </div>
             </div>
 
-            <div className="bg-card rounded-xl border border-border p-6">
-              <h3 className="section-title mb-4">Recent Activity</h3>
-              <div className="space-y-4">
-                {[
-                  { text: "Batch PCM-2024-001 completed", time: "10 mins ago", type: "success" },
-                  { text: "New raw material received", time: "1 hour ago", type: "info" },
-                  { text: "Quality check initiated", time: "2 hours ago", type: "warning" },
-                ].map((activity, index) => (
-                  <div key={index} className="flex items-start gap-3">
-                    <div className={`w-2 h-2 rounded-full mt-2 ${
-                      activity.type === "success" ? "bg-success" :
-                      activity.type === "warning" ? "bg-warning" : "bg-info"
-                    }`} />
-                    <div>
-                      <p className="text-sm text-foreground">{activity.text}</p>
-                      <p className="text-xs text-muted-foreground">{activity.time}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-</div>
-            </div>
+            {activeTab === "raw" ? (
+              <DataTable
+                data={[...rawMaterials, ...rawMaterialsData]}
+                columns={rawMaterialColumns}
+                keyField="id"
+              />
+            ) : (
+              <DataTable
+                data={processedMaterialsData}
+                columns={processedMaterialColumns}
+                keyField="id"
+              />
+            )}
           </div>
         </div>
+
+        {/* Batches Table */}
+        {batches.length > 0 && (
+          <div className="mt-6 bg-card rounded-xl border border-border overflow-hidden">
+            <div className="px-6 py-4 border-b border-border">
+              <h2 className="section-title">Created Batches</h2>
+              <p className="section-subtitle">View all batches created from raw materials</p>
+            </div>
+            <div className="p-6">
+              <DataTable
+                data={batches}
+                columns={batchColumns}
+                keyField="id"
+              />
+            </div>
+          </div>
+        )}
 
         <Dialog open={isAddMaterialOpen} onOpenChange={setIsAddMaterialOpen}>
           <DialogContent className="sm:max-w-[500px]">

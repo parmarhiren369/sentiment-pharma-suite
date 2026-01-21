@@ -79,6 +79,7 @@ export default function Processing() {
   const [batchMode, setBatchMode] = useState<"system" | "manual">("system");
   const [manualBatchNo, setManualBatchNo] = useState("");
   const [batchDate, setBatchDate] = useState(new Date().toISOString().split('T')[0]);
+  const [batchStatus, setBatchStatus] = useState<"in process" | "approved" | "discarded">("in process");
   const [loading, setLoading] = useState(false);
   const [generatedBatchNo, setGeneratedBatchNo] = useState("");
   const { toast } = useToast();
@@ -203,7 +204,7 @@ export default function Processing() {
       await addDoc(batchesRef, {
         batchNo,
         items: validItems,
-        status: "In Progress",
+        status: batchStatus,
         batchDate,
         createdAt: Timestamp.now(),
       });
@@ -220,6 +221,27 @@ export default function Processing() {
         }
       }
 
+      // If status is approved, create finished goods in processed inventory
+      if (batchStatus === "approved") {
+        const processedInventoryRef = collection(db, "processedInventory");
+        
+        // Calculate total quantity (sum of all used quantities)
+        const totalQuantity = validItems.reduce((sum, item) => sum + item.useQuantity, 0);
+        
+        // Create finished good entry
+        await addDoc(processedInventoryRef, {
+          name: `Finished Batch ${batchNo}`,
+          batchNo,
+          quantity: totalQuantity.toString(),
+          unit: validItems[0]?.unit || "kg",
+          category: "Finished Goods",
+          location: "Production",
+          status: "In Stock",
+          processDate: batchDate,
+          createdAt: Timestamp.now(),
+        });
+      }
+
       toast({
         title: "Success",
         description: `Batch ${batchNo} created successfully`,
@@ -230,6 +252,7 @@ export default function Processing() {
       setBatchMode("system");
       setManualBatchNo("");
       setBatchDate(new Date().toISOString().split('T')[0]);
+      setBatchStatus("in process");
       setIsAddRecipeOpen(false);
       await fetchRawInventory();
       await fetchBatches();
@@ -358,11 +381,12 @@ export default function Processing() {
       header: "Status",
       render: (item: Batch) => (
         <span className={`badge-type ${
-          item.status === "Completed" ? "badge-processed" : 
-          item.status === "In Progress" ? "badge-raw" : 
+          item.status === "approved" ? "badge-processed" : 
+          item.status === "discarded" ? "bg-destructive/20 text-destructive" : 
           "bg-warning/20 text-warning"
         }`}>
-          {item.status}
+          {item.status === "approved" ? "Approved" : 
+           item.status === "discarded" ? "Discarded" : "In Process"}
         </span>
       )
     },
@@ -392,8 +416,8 @@ export default function Processing() {
             iconColor="text-primary"
           />
           <StatCard
-            title="Active Batches"
-            value={batches.filter(b => b.status === "In Progress").length}
+            title="In Process"
+            value={batches.filter(b => b.status === "in process").length}
             change="+8%"
             changeType="positive"
             icon={Package}
@@ -401,8 +425,8 @@ export default function Processing() {
             iconColor="text-info"
           />
           <StatCard
-            title="Completed Batches"
-            value={batches.filter(b => b.status === "Completed").length}
+            title="Approved Batches"
+            value={batches.filter(b => b.status === "approved").length}
             change="+15%"
             changeType="positive"
             icon={CheckCircle2}
@@ -511,6 +535,24 @@ export default function Processing() {
                   />
                 </div>
 
+                {/* Batch Status */}
+                <div>
+                  <Label htmlFor="batchStatus">Batch Status *</Label>
+                  <Select
+                    value={batchStatus}
+                    onValueChange={(value) => setBatchStatus(value as "in process" | "approved" | "discarded")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="in process">In Process</SelectItem>
+                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="discarded">Discarded</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {/* Divider */}
                 <div className="border-t border-border pt-4">
                   <Label className="text-sm font-medium mb-3 block">Raw Materials</Label>
@@ -615,6 +657,7 @@ export default function Processing() {
                 setBatchMode("system");
                 setManualBatchNo("");
                 setBatchDate(new Date().toISOString().split("T")[0]);
+                setBatchStatus("in process");
               }}>
                 Cancel
               </Button>

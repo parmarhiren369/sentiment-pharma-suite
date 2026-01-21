@@ -126,7 +126,8 @@ export default function Processing() {
   const generateBatchNumber = async () => {
     const now = new Date();
     const month = now.toLocaleString('en-US', { month: 'short' }).toUpperCase();
-    const prefix = `BTC${month}`;
+    const year = now.getFullYear().toString().slice(-2);
+    const prefix = `BTC${month}${year}`;
     
     if (!db) {
       return `${prefix}001`;
@@ -139,15 +140,15 @@ export default function Processing() {
       
       let serialNumber = 1;
       
-      // Find the last batch with the same month prefix
+      // Find the last batch with the same month and year prefix
       if (!snapshot.empty) {
         for (const doc of snapshot.docs) {
           const batchData = doc.data();
           const batchNo = batchData.batchNo as string;
           
-          // Check if this batch is from the same month (e.g., BTCJAN)
+          // Check if this batch is from the same month and year (e.g., BTCJAN26)
           if (batchNo.startsWith(prefix)) {
-            // Extract the serial number (e.g., BTCJAN001 -> 001)
+            // Extract the serial number (e.g., BTCJAN26001 -> 001)
             const lastSerial = parseInt(batchNo.slice(prefix.length));
             if (!isNaN(lastSerial)) {
               serialNumber = lastSerial + 1;

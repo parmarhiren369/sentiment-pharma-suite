@@ -11,7 +11,9 @@ import {
   Plus,
   FileText,
   TrendingUp,
-  ArrowRight
+  ArrowRight,
+  Trash2,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -19,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, Timestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, Timestamp, query, orderBy, limit, updateDoc, doc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 interface RawMaterial {
@@ -42,6 +44,32 @@ interface ProcessedMaterial {
   yield: string;
 }
 
+interface RawInventoryItem {
+  id: string;
+  name: string;
+  quantity: string;
+  unit: string;
+  category: string;
+  location: string;
+  supplier: string;
+}
+
+interface BatchItem {
+  rawItemId: string;
+  rawItemName: string;
+  currentQuantity: number;
+  unit: string;
+  useQuantity: number;
+}
+
+interface Batch {
+  id: string;
+  batchNo: string;
+  items: BatchItem[];
+  createdAt: Date;
+  status: string;
+}
+
 const rawMaterialsData: RawMaterial[] = [];
 
 const processedMaterialsData: ProcessedMaterial[] = [];
@@ -49,7 +77,13 @@ const processedMaterialsData: ProcessedMaterial[] = [];
 export default function Processing() {
   const [activeTab, setActiveTab] = useState<"raw" | "processed">("raw");
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
+  const [isAddRecipeOpen, setIsAddRecipeOpen] = useState(false);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [rawInventory, setRawInventory] = useState<RawInventoryItem[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [batchItems, setBatchItems] = useState<BatchItem[]>([
+    { rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }
+  ]);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -75,8 +109,66 @@ export default function Processing() {
     }
   };
 
+  const fetchRawInventory = async () => {
+    try {
+      const inventoryRef = collection(db, "rawInventory");
+      const snapshot = await getDocs(inventoryRef);
+      const items = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as RawInventoryItem[];
+      setRawInventory(items);
+    } catch (error) {
+      console.error("Error fetching inventory:", error);
+    }
+  };
+
+  const fetchBatches = async () => {
+    try {
+      const batchesRef = collection(db, "batches");
+      const snapshot = await getDocs(batchesRef);
+      const batchData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      })) as Batch[];
+      setBatches(batchData);
+    } catch (error) {
+      console.error("Error fetching batches:", error);
+    }
+  };
+
+  const generateBatchNumber = async () => {
+    const now = new Date();
+    const month = now.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+    const year = now.getFullYear().toString().slice(-2);
+    
+    try {
+      const batchesRef = collection(db, "batches");
+      const q = query(batchesRef, orderBy("createdAt", "desc"), limit(1));
+      const snapshot = await getDocs(q);
+      
+      let serialNumber = 1;
+      if (!snapshot.empty) {
+        const lastBatch = snapshot.docs[0].data();
+        const lastBatchNo = lastBatch.batchNo as string;
+        // Extract the serial number from last batch (e.g., BTCJAN26001 -> 001)
+        const lastSerial = parseInt(lastBatchNo.slice(-3));
+        serialNumber = lastSerial + 1;
+      }
+      
+      const serialStr = serialNumber.toString().padStart(3, '0');
+      return `BTC${month}${year}${serialStr}`;
+    } catch (error) {
+      console.error("Error generating batch number:", error);
+      return `BTC${month}${year}001`;
+    }
+  };
+
   useEffect(() => {
     fetchRawMaterials();
+    fetchRawInventory();
+    fetchBatches();
   }, []);
 
   const handleAddMaterial = async () => {
@@ -130,6 +222,111 @@ export default function Processing() {
       toast({
         title: "Error",
         description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddBatchItem = () => {
+    setBatchItems([...batchItems, { rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }]);
+  };
+
+  const handleRemoveBatchItem = (index: number) => {
+    if (batchItems.length > 1) {
+      const newItems = batchItems.filter((_, i) => i !== index);
+      setBatchItems(newItems);
+    }
+  };
+
+  const handleBatchItemChange = (index: number, field: keyof BatchItem, value: string | number) => {
+    const newItems = [...batchItems];
+    
+    if (field === "rawItemId") {
+      const selectedItem = rawInventory.find(item => item.id === value);
+      if (selectedItem) {
+        newItems[index] = {
+          ...newItems[index],
+          rawItemId: selectedItem.id,
+          rawItemName: selectedItem.name,
+          currentQuantity: parseFloat(selectedItem.quantity) || 0,
+          unit: selectedItem.unit,
+          useQuantity: 0
+        };
+      }
+    } else if (field === "useQuantity") {
+      const numValue = typeof value === 'string' ? parseFloat(value) || 0 : value;
+      if (numValue <= newItems[index].currentQuantity) {
+        newItems[index][field] = numValue;
+      } else {
+        toast({
+          title: "Error",
+          description: "Use quantity cannot exceed current quantity",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      newItems[index][field] = value as never;
+    }
+    
+    setBatchItems(newItems);
+  };
+
+  const handleSaveBatch = async () => {
+    // Validation
+    const validItems = batchItems.filter(item => item.rawItemId && item.useQuantity > 0);
+    if (validItems.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please add at least one item with quantity",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      const batchNo = await generateBatchNumber();
+      
+      // Save batch to Firebase
+      const batchesRef = collection(db, "batches");
+      await addDoc(batchesRef, {
+        batchNo,
+        items: validItems,
+        status: "In Progress",
+        createdAt: Timestamp.now(),
+      });
+
+      // Update raw inventory quantities
+      for (const item of validItems) {
+        const inventoryDocRef = doc(db, "rawInventory", item.rawItemId);
+        const currentItem = rawInventory.find(inv => inv.id === item.rawItemId);
+        if (currentItem) {
+          const newQuantity = parseFloat(currentItem.quantity) - item.useQuantity;
+          await updateDoc(inventoryDocRef, {
+            quantity: newQuantity.toString(),
+          });
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: `Batch ${batchNo} created successfully`,
+      });
+
+      // Reset form and refresh data
+      setBatchItems([{ rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }]);
+      setIsAddRecipeOpen(false);
+      await fetchRawInventory();
+      await fetchBatches();
+    } catch (error) {
+      console.error("Error saving batch:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create batch",
         variant: "destructive",
       });
     } finally {
@@ -291,8 +488,8 @@ export default function Processing() {
             <div className="bg-card rounded-xl border border-border p-6">
               <h3 className="section-title mb-4">Quick Actions</h3>
               <div className="grid grid-cols-2 gap-3">
+                <QuickActionCard title="Add Recipe" icon={FlaskConical} onClick={() => setIsAddRecipeOpen(true)} />
                 <QuickActionCard title="Add Material" icon={Plus} onClick={() => setIsAddMaterialOpen(true)} />
-                <QuickActionCard title="New Batch" icon={FlaskConical} />
                 <QuickActionCard title="Reports" icon={FileText} />
                 <QuickActionCard title="Analytics" icon={TrendingUp} />
               </div>
@@ -401,6 +598,118 @@ export default function Processing() {
               </Button>
               <Button onClick={handleAddMaterial} disabled={loading}>
                 {loading ? "Adding..." : "Add Material"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Recipe/Batch Dialog */}
+        <Dialog open={isAddRecipeOpen} onOpenChange={setIsAddRecipeOpen}>
+          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Create New Batch</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <div className="space-y-4">
+                {batchItems.map((item, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-3 items-end p-4 border border-border rounded-lg bg-muted/30">
+                    <div className="col-span-11 grid grid-cols-3 gap-3">
+                      {/* Raw Item Selection */}
+                      <div className="space-y-2">
+                        <Label>Raw Item</Label>
+                        <Select
+                          value={item.rawItemId}
+                          onValueChange={(value) => handleBatchItemChange(index, "rawItemId", value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select item" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {rawInventory.map((invItem) => (
+                              <SelectItem key={invItem.id} value={invItem.id}>
+                                {invItem.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Current Quantity Display */}
+                      <div className="space-y-2">
+                        <Label>Current Quantity</Label>
+                        <Input
+                          value={item.currentQuantity > 0 ? `${item.currentQuantity} ${item.unit}` : ""}
+                          disabled
+                          className="bg-background"
+                          placeholder="Select item first"
+                        />
+                      </div>
+
+                      {/* Use Quantity Input */}
+                      <div className="space-y-2">
+                        <Label>Use Quantity ({item.unit || "unit"})</Label>
+                        <Input
+                          type="number"
+                          value={item.useQuantity || ""}
+                          onChange={(e) => handleBatchItemChange(index, "useQuantity", e.target.value)}
+                          placeholder="Enter quantity"
+                          max={item.currentQuantity}
+                          min={0}
+                          disabled={!item.rawItemId}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Remove Button */}
+                    <div className="col-span-1 flex items-center justify-center">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveBatchItem(index)}
+                        disabled={batchItems.length === 1}
+                        className="h-10 w-10 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Add More Items Button */}
+                <Button
+                  variant="outline"
+                  onClick={handleAddBatchItem}
+                  className="w-full gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Another Raw Item
+                </Button>
+              </div>
+
+              {/* Summary */}
+              {batchItems.some(item => item.useQuantity > 0) && (
+                <div className="mt-6 p-4 bg-primary/10 border border-primary/20 rounded-lg">
+                  <h4 className="font-semibold text-sm mb-2">Batch Summary</h4>
+                  <div className="space-y-1 text-sm">
+                    {batchItems.filter(item => item.useQuantity > 0).map((item, idx) => (
+                      <div key={idx} className="flex justify-between">
+                        <span>{item.rawItemName}</span>
+                        <span className="font-medium">{item.useQuantity} {item.unit}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setIsAddRecipeOpen(false);
+                setBatchItems([{ rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }]);
+              }}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveBatch} disabled={loading}>
+                {loading ? "Saving..." : "Save Batch"}
               </Button>
             </DialogFooter>
           </DialogContent>

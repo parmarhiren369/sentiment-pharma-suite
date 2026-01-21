@@ -126,31 +126,42 @@ export default function Processing() {
   const generateBatchNumber = async () => {
     const now = new Date();
     const month = now.toLocaleString('en-US', { month: 'short' }).toUpperCase();
-    const year = now.getFullYear().toString().slice(-2);
+    const prefix = `BTC${month}`;
     
     if (!db) {
-      return `BTC${month}${year}001`;
+      return `${prefix}001`;
     }
     
     try {
       const batchesRef = collection(db, "batches");
-      const q = query(batchesRef, orderBy("createdAt", "desc"), limit(1));
+      const q = query(batchesRef, orderBy("createdAt", "desc"), limit(50));
       const snapshot = await getDocs(q);
       
       let serialNumber = 1;
+      
+      // Find the last batch with the same month prefix
       if (!snapshot.empty) {
-        const lastBatch = snapshot.docs[0].data();
-        const lastBatchNo = lastBatch.batchNo as string;
-        // Extract the serial number from last batch (e.g., BTCJAN26001 -> 001)
-        const lastSerial = parseInt(lastBatchNo.slice(-3));
-        serialNumber = lastSerial + 1;
+        for (const doc of snapshot.docs) {
+          const batchData = doc.data();
+          const batchNo = batchData.batchNo as string;
+          
+          // Check if this batch is from the same month (e.g., BTCJAN)
+          if (batchNo.startsWith(prefix)) {
+            // Extract the serial number (e.g., BTCJAN001 -> 001)
+            const lastSerial = parseInt(batchNo.slice(prefix.length));
+            if (!isNaN(lastSerial)) {
+              serialNumber = lastSerial + 1;
+              break;
+            }
+          }
+        }
       }
       
       const serialStr = serialNumber.toString().padStart(3, '0');
-      return `BTC${month}${year}${serialStr}`;
+      return `${prefix}${serialStr}`;
     } catch (error) {
       console.error("Error generating batch number:", error);
-      return `BTC${month}${year}001`;
+      return `${prefix}001`;
     }
   };
 

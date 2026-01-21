@@ -70,39 +70,17 @@ const rawMaterialsData: RawMaterial[] = [];
 const processedMaterialsData: ProcessedMaterial[] = [];
 
 export default function Processing() {
-  const [activeTab, setActiveTab] = useState<"raw" | "processed">("raw");
-  const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
   const [isAddRecipeOpen, setIsAddRecipeOpen] = useState(false);
-  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [rawInventory, setRawInventory] = useState<RawInventoryItem[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [batchItems, setBatchItems] = useState<BatchItem[]>([
     { rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }
   ]);
+  const [batchMode, setBatchMode] = useState<"system" | "manual">("system");
+  const [manualBatchNo, setManualBatchNo] = useState("");
+  const [batchDate, setBatchDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    batchNo: "",
-    quantity: "",
-    status: "In Stock" as "In Stock" | "Low Stock" | "Processing",
-    supplier: "",
-    expiryDate: "",
-  });
   const { toast } = useToast();
-
-  const fetchRawMaterials = async () => {
-    try {
-      const materialsRef = collection(db, "rawMaterials");
-      const snapshot = await getDocs(materialsRef);
-      const materials = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as RawMaterial[];
-      setRawMaterials(materials);
-    } catch (error) {
-      console.error("Error fetching materials:", error);
-    }
-  };
 
   const fetchRawInventory = async () => {
     try {
@@ -161,62 +139,77 @@ export default function Processing() {
   };
 
   useEffect(() => {
-    fetchRawMaterials();
     fetchRawInventory();
     fetchBatches();
   }, []);
 
-  const handleAddMaterial = async () => {
-    if (!formData.name || !formData.batchNo || !formData.quantity || !formData.supplier || !formData.expiryDate) {
+  const handleSaveBatch = async () => {
+    // Validation
+    const validItems = batchItems.filter(item => item.rawItemId && item.useQuantity > 0);
+    if (validItems.length === 0) {
       toast({
         title: "Error",
-        description: "Please fill in all fields",
+        description: "Please add at least one item with quantity",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate manual batch number if manual mode selected
+    if (batchMode === "manual" && !manualBatchNo.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a batch number",
         variant: "destructive",
       });
       return;
     }
 
     setLoading(true);
-    console.log("Starting to add material...", formData);
     
     try {
-      const materialsRef = collection(db, "rawMaterials");
-      console.log("Collection ref obtained:", materialsRef.path);
+      const batchNo = batchMode === "system" ? await generateBatchNumber() : manualBatchNo;
       
-      const materialData = {
-        name: formData.name,
-        batchNo: formData.batchNo,
-        quantity: formData.quantity,
-        status: formData.status,
-        supplier: formData.supplier,
-        expiryDate: formData.expiryDate,
+      // Save batch to Firebase
+      const batchesRef = collection(db, "batches");
+      await addDoc(batchesRef, {
+        batchNo,
+        items: validItems,
+        status: "In Progress",
+        batchDate,
         createdAt: Timestamp.now(),
-      };
-      console.log("Data to save:", materialData);
-      
-      const docRef = await addDoc(materialsRef, materialData);
-      console.log("Document written with ID: ", docRef.id);
-      
+      });
+
+      // Update raw inventory quantities
+      for (const item of validItems) {
+        const inventoryDocRef = doc(db, "rawInventory", item.rawItemId);
+        const currentItem = rawInventory.find(inv => inv.id === item.rawItemId);
+        if (currentItem) {
+          const newQuantity = parseFloat(currentItem.quantity) - item.useQuantity;
+          await updateDoc(inventoryDocRef, {
+            quantity: newQuantity.toString(),
+          });
+        }
+      }
+
       toast({
         title: "Success",
-        description: "Material added successfully",
+        description: `Batch ${batchNo} created successfully`,
       });
-      setIsAddMaterialOpen(false);
-      setFormData({
-        name: "",
-        batchNo: "",
-        quantity: "",
-        status: "In Stock",
-        supplier: "",
-        expiryDate: "",
-      });
-      await fetchRawMaterials();
-    } catch (error: unknown) {
-      console.error("Error adding material:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to add material";
+
+      // Reset form and refresh data
+      setBatchItems([{ rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }]);
+      setBatchMode("system");
+      setManualBatchNo("");
+      setBatchDate(new Date().toISOString().split('T')[0]);
+      setIsAddRecipeOpen(false);
+      await fetchRawInventory();
+      await fetchBatches();
+    } catch (error) {
+      console.error("Error saving batch:", error);
       toast({
         title: "Error",
-        description: errorMessage,
+        description: "Failed to create batch",
         variant: "destructive",
       });
     } finally {
@@ -267,66 +260,6 @@ export default function Processing() {
     }
     
     setBatchItems(newItems);
-  };
-
-  const handleSaveBatch = async () => {
-    // Validation
-    const validItems = batchItems.filter(item => item.rawItemId && item.useQuantity > 0);
-    if (validItems.length === 0) {
-      toast({
-        title: "Error",
-        description: "Please add at least one item with quantity",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setLoading(true);
-    
-    try {
-      const batchNo = await generateBatchNumber();
-      
-      // Save batch to Firebase
-      const batchesRef = collection(db, "batches");
-      await addDoc(batchesRef, {
-        batchNo,
-        items: validItems,
-        status: "In Progress",
-        createdAt: Timestamp.now(),
-      });
-
-      // Update raw inventory quantities
-      for (const item of validItems) {
-        const inventoryDocRef = doc(db, "rawInventory", item.rawItemId);
-        const currentItem = rawInventory.find(inv => inv.id === item.rawItemId);
-        if (currentItem) {
-          const newQuantity = parseFloat(currentItem.quantity) - item.useQuantity;
-          await updateDoc(inventoryDocRef, {
-            quantity: newQuantity.toString(),
-          });
-        }
-      }
-
-      toast({
-        title: "Success",
-        description: `Batch ${batchNo} created successfully`,
-      });
-
-      // Reset form and refresh data
-      setBatchItems([{ rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }]);
-      setIsAddRecipeOpen(false);
-      await fetchRawInventory();
-      await fetchBatches();
-    } catch (error) {
-      console.error("Error saving batch:", error);
-      toast({
-        title: "Error",
-        description: "Failed to create batch",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
   };
 
   const rawMaterialColumns = [
@@ -416,120 +349,79 @@ export default function Processing() {
 
   return (
     <>
-      <AppHeader title="Processing Dashboard" subtitle="Manage raw materials and processed products" />
+      <AppHeader title="Processing Dashboard" subtitle="Create and manage batches from raw materials" />
       
       <div className="flex-1 overflow-auto p-6">
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
-            title="Total Raw Materials"
-            value={rawMaterials.length + rawMaterialsData.length}
+            title="Total Batches"
+            value={batches.length}
             change="+12%"
-            changeType="positive"
-            icon={Package}
-            iconBgColor="bg-info/20"
-            iconColor="text-info"
-          />
-          <StatCard
-            title="Active Batches"
-            value={processedMaterialsData.filter(m => m.status === "In Progress").length}
-            change="+8%"
             changeType="positive"
             icon={FlaskConical}
             iconBgColor="bg-primary/20"
             iconColor="text-primary"
           />
           <StatCard
-            title="Quality Checks"
-            value={processedMaterialsData.filter(m => m.status === "Quality Check").length}
-            change="+5%"
+            title="Active Batches"
+            value={batches.filter(b => b.status === "In Progress").length}
+            change="+8%"
             changeType="positive"
-            icon={Beaker}
-            iconBgColor="bg-warning/20"
-            iconColor="text-warning"
+            icon={Package}
+            iconBgColor="bg-info/20"
+            iconColor="text-info"
           />
           <StatCard
-            title="Completed Today"
-            value={processedMaterialsData.filter(m => m.status === "Completed").length}
+            title="Completed Batches"
+            value={batches.filter(b => b.status === "Completed").length}
             change="+15%"
             changeType="positive"
             icon={CheckCircle2}
             iconBgColor="bg-success/20"
             iconColor="text-success"
           />
-        </div>
-
-        {/* Main Content */}
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
-          <div className="flex items-center justify-between border-b border-border px-6 py-4">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setActiveTab("raw")}
-                className={`tab-item ${activeTab === "raw" ? "tab-item-active" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                <Package className="w-4 h-4 inline mr-2" />
-                Raw Materials
-              </button>
-              <button
-                onClick={() => setActiveTab("processed")}
-                className={`tab-item ${activeTab === "processed" ? "tab-item-active" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                <FlaskConical className="w-4 h-4 inline mr-2" />
-                Processed Materials
-              </button>
-            </div>
-            <Button onClick={() => setIsAddRecipeOpen(true)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              Add Recipe
-            </Button>
-          </div>
-
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="section-title">
-                  {activeTab === "raw" ? "Raw Material Inventory" : "Processed Products"}
-                </h2>
-                <p className="section-subtitle">
-                  {activeTab === "raw" 
-                    ? "Track and manage incoming raw materials" 
-                    : "Monitor production batches and yields"}
-                </p>
-              </div>
-            </div>
-
-            {activeTab === "raw" ? (
-              <DataTable
-                data={[...rawMaterials, ...rawMaterialsData]}
-                columns={rawMaterialColumns}
-                keyField="id"
-              />
-            ) : (
-              <DataTable
-                data={processedMaterialsData}
-                columns={processedMaterialColumns}
-                keyField="id"
-              />
-            )}
-          </div>
+          <StatCard
+            title="Available Materials"
+            value={rawInventory.length}
+            change="+5%"
+            changeType="positive"
+            icon={Beaker}
+            iconBgColor="bg-warning/20"
+            iconColor="text-warning"
+          />
         </div>
 
         {/* Batches Table */}
-        {batches.length > 0 && (
-          <div className="mt-6 bg-card rounded-xl border border-border overflow-hidden">
-            <div className="px-6 py-4 border-b border-border">
-              <h2 className="section-title">Created Batches</h2>
-              <p className="section-subtitle">View all batches created from raw materials</p>
-            </div>
-            <div className="p-6">
+        <div className="bg-card rounded-xl border border-border overflow-hidden mb-6">
+          <div className="px-6 py-4 border-b border-border">
+            <h2 className="section-title">Created Batches</h2>
+            <p className="section-subtitle">View all batches created from raw materials</p>
+          </div>
+          <div className="p-6">
+            {batches.length > 0 ? (
               <DataTable
                 data={batches}
                 columns={batchColumns}
                 keyField="id"
               />
-            </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <FlaskConical className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                <p>No batches created yet</p>
+                <p className="text-sm mt-2">Click "Add Recipe" below to create your first batch</p>
+              </div>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* Add Recipe Button */}
+        <div className="flex justify-center">
+          <Button onClick={() => setIsAddRecipeOpen(true)} size="lg" className="gap-2">
+            <Plus className="w-5 h-5" />
+            Add Recipe
+          </Button>
+        </div>
 
         <Dialog open={isAddMaterialOpen} onOpenChange={setIsAddMaterialOpen}>
           <DialogContent className="sm:max-w-[500px]">
@@ -621,7 +513,66 @@ export default function Processing() {
               <DialogTitle>Create New Batch</DialogTitle>
             </DialogHeader>
             <div className="py-4">
-              <div className="space-y-4">
+              <div className="space-y-6">
+                {/* Batch Mode Selection */}
+                <div>
+                  <Label className="text-sm font-medium mb-3 block">Batch Number Mode</Label>
+                  <div className="flex gap-4">
+                    <Button
+                      type="button"
+                      variant={batchMode === "system" ? "default" : "outline"}
+                      onClick={() => setBatchMode("system")}
+                      className="flex-1"
+                    >
+                      System Generated Batch No
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={batchMode === "manual" ? "default" : "outline"}
+                      onClick={() => setBatchMode("manual")}
+                      className="flex-1"
+                    >
+                      Manual Batch No
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Batch Number Display/Input */}
+                {batchMode === "system" ? (
+                  <div className="p-4 bg-muted rounded-lg">
+                    <Label className="text-sm font-medium">Batch Number</Label>
+                    <p className="text-lg font-semibold mt-1">{generateBatchNumber()}</p>
+                  </div>
+                ) : (
+                  <div>
+                    <Label htmlFor="manualBatchNo">Manual Batch Number *</Label>
+                    <Input
+                      id="manualBatchNo"
+                      value={manualBatchNo}
+                      onChange={(e) => setManualBatchNo(e.target.value)}
+                      placeholder="Enter batch number (e.g., BATCH-001)"
+                    />
+                  </div>
+                )}
+
+                {/* Batch Date */}
+                <div>
+                  <Label htmlFor="batchDate">Batch Date *</Label>
+                  <Input
+                    id="batchDate"
+                    type="date"
+                    value={batchDate}
+                    onChange={(e) => setBatchDate(e.target.value)}
+                  />
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-border pt-4">
+                  <Label className="text-sm font-medium mb-3 block">Raw Materials</Label>
+                </div>
+              </div>
+
+              <div className="space-y-4 mt-4">
                 {batchItems.map((item, index) => (
                   <div key={index} className="grid grid-cols-12 gap-3 items-end p-4 border border-border rounded-lg bg-muted/30">
                     <div className="col-span-11 grid grid-cols-3 gap-3">
@@ -716,6 +667,9 @@ export default function Processing() {
               <Button variant="outline" onClick={() => {
                 setIsAddRecipeOpen(false);
                 setBatchItems([{ rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }]);
+                setBatchMode("system");
+                setManualBatchNo("");
+                setBatchDate(new Date().toISOString().split("T")[0]);
               }}>
                 Cancel
               </Button>

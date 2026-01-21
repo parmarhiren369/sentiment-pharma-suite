@@ -44,7 +44,6 @@ export default function RawInventory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -260,82 +259,71 @@ export default function RawInventory() {
               <p className="section-subtitle">Complete overview of raw material stock levels</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="gap-2"
-                onClick={() => setShowFilters(!showFilters)}
-              >
-                <Filter className="w-4 h-4" />
-                {showFilters ? "Hide Filters" : "Show Filters"}
-              </Button>
               <Button variant="outline" size="sm" className="gap-2">
                 <Download className="w-4 h-4" />
                 Export
+              </Button>
+              <Button 
+                size="sm" 
+                onClick={() => setIsAddItemOpen(true)}
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Item
               </Button>
             </div>
           </div>
 
           {/* Filters Section */}
-          {showFilters && (
-            <div className="px-6 py-4 border-b border-border bg-muted/30">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="md:col-span-2">
-                  <Label htmlFor="search" className="text-sm font-medium mb-2 block">Search</Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="search"
-                      placeholder="Search by name, category, or supplier..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="startDate" className="text-sm font-medium mb-2 block">Start Date</Label>
+          <div className="px-6 py-4 border-b border-border bg-muted/30">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="md:col-span-2">
+                <Label htmlFor="search" className="text-sm font-medium mb-2 block">Search</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    id="startDate"
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="endDate" className="text-sm font-medium mb-2 block">End Date</Label>
-                  <Input
-                    id="endDate"
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    id="search"
+                    placeholder="Search by name, category, or supplier..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
                   />
                 </div>
               </div>
-              <div className="flex items-center gap-2 mt-4">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={clearFilters}
-                  className="gap-2"
-                >
-                  <X className="w-4 h-4" />
-                  Clear Filters
-                </Button>
-                <Button 
-                  size="sm" 
-                  onClick={() => setIsAddItemOpen(true)}
-                  className="gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Item
-                </Button>
-                <div className="text-sm text-muted-foreground ml-auto">
-                  Showing {filteredData.length} of {allInventoryData.length} items
-                </div>
+              <div>
+                <Label htmlFor="startDate" className="text-sm font-medium mb-2 block">Start Date</Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="endDate" className="text-sm font-medium mb-2 block">End Date</Label>
+                <Input
+                  id="endDate"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
               </div>
             </div>
-          )}
+            <div className="flex items-center gap-2 mt-4">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={clearFilters}
+                className="gap-2"
+              >
+                <X className="w-4 h-4" />
+                Clear Filters
+              </Button>
+              <div className="text-sm text-muted-foreground ml-auto">
+                Showing {filteredData.length} of {allInventoryData.length} items
+              </div>
+            </div>
+          </div>
 
           <div className="p-6">
             <DataTable

@@ -8,13 +8,17 @@ import {
   Beaker, 
   CheckCircle2,
   Plus,
-  Trash2
+  Trash2,
+  MoreVertical,
+  Edit,
+  Eye
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, Timestamp, query, orderBy, limit, updateDoc, doc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
@@ -84,6 +88,9 @@ export default function Processing() {
   const [generatedBatchNo, setGeneratedBatchNo] = useState("");
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
   const [isBatchDetailOpen, setIsBatchDetailOpen] = useState(false);
+  const [isEditStatusOpen, setIsEditStatusOpen] = useState(false);
+  const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
+  const [newStatus, setNewStatus] = useState<"in process" | "approved" | "discarded">("in process");
   const { toast } = useToast();
 
   const fetchRawInventory = async () => {
@@ -319,6 +326,60 @@ export default function Processing() {
     setIsBatchDetailOpen(true);
   };
 
+  const handleEditStatus = (batch: Batch) => {
+    setEditingBatch(batch);
+    setNewStatus(batch.status as "in process" | "approved" | "discarded");
+    setIsEditStatusOpen(true);
+  };
+
+  const handleUpdateStatus = async () => {
+    if (!editingBatch || !db) return;
+
+    setLoading(true);
+    try {
+      const batchDocRef = doc(db, "batches", editingBatch.id);
+      await updateDoc(batchDocRef, {
+        status: newStatus,
+      });
+
+      // If status changed to approved, create/update finished goods in processed inventory
+      if (newStatus === "approved" && editingBatch.status !== "approved") {
+        const processedInventoryRef = collection(db, "processedInventory");
+        const totalQuantity = editingBatch.items.reduce((sum, item) => sum + item.useQuantity, 0);
+        
+        await addDoc(processedInventoryRef, {
+          name: `Finished Batch ${editingBatch.batchNo}`,
+          batchNo: editingBatch.batchNo,
+          quantity: totalQuantity.toString(),
+          unit: editingBatch.items[0]?.unit || "kg",
+          category: "Finished Goods",
+          location: "Production",
+          status: "In Stock",
+          processDate: new Date().toISOString().split('T')[0],
+          createdAt: Timestamp.now(),
+        });
+      }
+
+      toast({
+        title: "Success",
+        description: "Batch status updated successfully",
+      });
+
+      setIsEditStatusOpen(false);
+      setEditingBatch(null);
+      await fetchBatches();
+    } catch (error) {
+      console.error("Error updating status:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update batch status",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const rawMaterialColumns = [
     { key: "name" as keyof RawMaterial, header: "Material Name" },
     { key: "batchNo" as keyof RawMaterial, header: "Batch No." },
@@ -411,6 +472,35 @@ export default function Processing() {
       header: "Created At",
       render: (item: Batch) => (
         <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+      )
+    },
+    {
+      key: "id" as keyof Batch,
+      header: "Actions",
+      render: (item: Batch) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              handleBatchClick(item);
+            }}>
+              <Eye className="h-4 w-4 mr-2" />
+              View Details
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              handleEditStatus(item);
+            }}>
+              <Edit className="h-4 w-4 mr-2" />
+              Update Status
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )
     },
   ];
@@ -753,6 +843,61 @@ export default function Processing() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsBatchDetailOpen(false)}>
                 Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Status Dialog */}
+        <Dialog open={isEditStatusOpen} onOpenChange={setIsEditStatusOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Update Batch Status</DialogTitle>
+            </DialogHeader>
+            {editingBatch && (
+              <div className="py-4 space-y-4">
+                <div>
+                  <Label className="text-sm text-muted-foreground mb-2 block">Batch Number</Label>
+                  <p className="text-lg font-semibold">{editingBatch.batchNo}</p>
+                </div>
+                <div>
+                  <Label className="text-sm text-muted-foreground mb-2 block">Current Status</Label>
+                  <span className={`badge-type ${
+                    editingBatch.status === "approved" ? "badge-processed" : 
+                    editingBatch.status === "discarded" ? "bg-destructive/20 text-destructive" : 
+                    "bg-warning/20 text-warning"
+                  }`}>
+                    {editingBatch.status === "approved" ? "Approved" : 
+                     editingBatch.status === "discarded" ? "Discarded" : "In Process"}
+                  </span>
+                </div>
+                <div>
+                  <Label htmlFor="newStatus">New Status *</Label>
+                  <Select
+                    value={newStatus}
+                    onValueChange={(value) => setNewStatus(value as "in process" | "approved" | "discarded")}
+                  >
+                    <SelectTrigger className="mt-2">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="in process">In Process</SelectItem>
+                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="discarded">Discarded</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setIsEditStatusOpen(false);
+                setEditingBatch(null);
+              }}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateStatus} disabled={loading}>
+                {loading ? "Updating..." : "Update Status"}
               </Button>
             </DialogFooter>
           </DialogContent>

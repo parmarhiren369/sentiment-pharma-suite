@@ -8,6 +8,7 @@ interface StatCardProps {
   icon: LucideIcon;
   iconBgColor?: string;
   iconColor?: string;
+  subtitle?: string;
 }
 
 export function StatCard({
@@ -18,6 +19,7 @@ export function StatCard({
   icon: Icon,
   iconBgColor = "bg-primary/20",
   iconColor = "text-primary",
+  subtitle,
 }: StatCardProps) {
   const getBadgeClass = () => {
     switch (changeType) {
@@ -42,6 +44,9 @@ export function StatCard({
       </div>
       <p className="text-3xl font-bold text-foreground mb-1">{value}</p>
       <p className="text-sm text-muted-foreground">{title}</p>
+      {subtitle && (
+        <p className="text-xs text-muted-foreground/70 mt-1">{subtitle}</p>
+      )}
     </div>
   );
 }

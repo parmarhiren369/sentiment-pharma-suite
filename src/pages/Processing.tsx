@@ -84,6 +84,7 @@ export default function Processing() {
   const [manualBatchNo, setManualBatchNo] = useState("");
   const [batchDate, setBatchDate] = useState(new Date().toISOString().split('T')[0]);
   const [batchStatus, setBatchStatus] = useState<"in process" | "approved" | "discarded">("in process");
+  const [producedItemName, setProducedItemName] = useState("");
   const [loading, setLoading] = useState(false);
   const [generatedBatchNo, setGeneratedBatchNo] = useState("");
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
@@ -91,6 +92,7 @@ export default function Processing() {
   const [isEditStatusOpen, setIsEditStatusOpen] = useState(false);
   const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
   const [newStatus, setNewStatus] = useState<"in process" | "approved" | "discarded">("in process");
+  const [approvedProducedName, setApprovedProducedName] = useState("");
   const { toast } = useToast();
 
   const fetchRawInventory = async () => {
@@ -204,7 +206,18 @@ export default function Processing() {
     
     try {
       const batchNo = await generateBatchNumber();
-      
+
+      // If creating an approved batch, ensure produced item name is provided
+      if (batchStatus === "approved" && producedItemName.trim() === "") {
+        toast({
+          title: "Error",
+          description: "Please enter the produced item name for approved batches",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
       // Save batch to Firebase
       const batchesRef = collection(db, "batches");
       await addDoc(batchesRef, {
@@ -235,9 +248,9 @@ export default function Processing() {
         // Calculate total quantity (sum of all used quantities)
         const totalQuantity = validItems.reduce((sum, item) => sum + item.useQuantity, 0);
         
-        // Create finished good entry
+        // Create finished good entry using provided produced item name
         await addDoc(processedInventoryRef, {
-          name: `Finished Batch ${batchNo}`,
+          name: producedItemName.trim() || `Finished Batch ${batchNo}`,
           batchNo,
           quantity: totalQuantity.toString(),
           unit: validItems[0]?.unit || "kg",
@@ -257,6 +270,7 @@ export default function Processing() {
       // Reset form and refresh data
       setBatchItems([{ rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }]);
       setManualBatchNo("");
+      setProducedItemName("");
       setBatchDate(new Date().toISOString().split('T')[0]);
       setBatchStatus("in process");
       setIsAddRecipeOpen(false);
@@ -329,6 +343,7 @@ export default function Processing() {
   const handleEditStatus = (batch: Batch) => {
     setEditingBatch(batch);
     setNewStatus(batch.status as "in process" | "approved" | "discarded");
+    setApprovedProducedName("");
     setIsEditStatusOpen(true);
   };
 
@@ -344,11 +359,22 @@ export default function Processing() {
 
       // If status changed to approved, create/update finished goods in processed inventory
       if (newStatus === "approved" && editingBatch.status !== "approved") {
+        // Ensure approved produced name provided
+        if (approvedProducedName.trim() === "") {
+          toast({
+            title: "Error",
+            description: "Please enter the produced item name when approving a batch",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
         const processedInventoryRef = collection(db, "processedInventory");
         const totalQuantity = editingBatch.items.reduce((sum, item) => sum + item.useQuantity, 0);
-        
+
         await addDoc(processedInventoryRef, {
-          name: `Finished Batch ${editingBatch.batchNo}`,
+          name: approvedProducedName.trim() || `Finished Batch ${editingBatch.batchNo}`,
           batchNo: editingBatch.batchNo,
           quantity: totalQuantity.toString(),
           unit: editingBatch.items[0]?.unit || "kg",
@@ -358,6 +384,7 @@ export default function Processing() {
           processDate: new Date().toISOString().split('T')[0],
           createdAt: Timestamp.now(),
         });
+        setApprovedProducedName("");
       }
 
       toast({
@@ -638,6 +665,18 @@ export default function Processing() {
                       <SelectItem value="discarded">Discarded</SelectItem>
                     </SelectContent>
                   </Select>
+                  {batchStatus === "approved" && (
+                    <div className="mt-3">
+                      <Label htmlFor="producedItemName">Produced Item Name *</Label>
+                      <Input
+                        id="producedItemName"
+                        value={producedItemName}
+                        onChange={(e) => setProducedItemName(e.target.value)}
+                        placeholder="Enter produced item name"
+                        className="mt-2"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Divider */}
@@ -743,6 +782,7 @@ export default function Processing() {
                 setBatchItems([{ rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }]);
 
                 setManualBatchNo("");
+                setProducedItemName("");
                 setBatchDate(new Date().toISOString().split("T")[0]);
                 setBatchStatus("in process");
               }}>
@@ -886,6 +926,18 @@ export default function Processing() {
                       <SelectItem value="discarded">Discarded</SelectItem>
                     </SelectContent>
                   </Select>
+                  {newStatus === "approved" && editingBatch.status !== "approved" && (
+                    <div className="mt-3">
+                      <Label htmlFor="approvedProducedName">Produced Item Name *</Label>
+                      <Input
+                        id="approvedProducedName"
+                        value={approvedProducedName}
+                        onChange={(e) => setApprovedProducedName(e.target.value)}
+                        placeholder="Enter produced item name"
+                        className="mt-2"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -893,6 +945,7 @@ export default function Processing() {
               <Button variant="outline" onClick={() => {
                 setIsEditStatusOpen(false);
                 setEditingBatch(null);
+                setApprovedProducedName("");
               }}>
                 Cancel
               </Button>

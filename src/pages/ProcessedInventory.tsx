@@ -45,7 +45,6 @@ export default function ProcessedInventory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -270,15 +269,6 @@ export default function ProcessedInventory() {
               <p className="section-subtitle">Intermediate products ready for final processing</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="gap-2"
-                onClick={() => setShowFilters(!showFilters)}
-              >
-                <Filter className="w-4 h-4" />
-                {showFilters ? "Hide Filters" : "Show Filters"}
-              </Button>
               <Button variant="outline" size="sm" className="gap-2">
                 <Download className="w-4 h-4" />
                 Export
@@ -287,8 +277,7 @@ export default function ProcessedInventory() {
           </div>
 
           {/* Filters Section */}
-          {showFilters && (
-            <div className="px-6 py-4 border-b border-border bg-muted/30">
+          <div className="px-6 py-4 border-b border-border bg-muted/30">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">
                   <Label htmlFor="search" className="text-sm font-medium mb-2 block">Search</Label>
@@ -345,7 +334,6 @@ export default function ProcessedInventory() {
                 </div>
               </div>
             </div>
-          )}
 
           <div className="p-6">
             <DataTable

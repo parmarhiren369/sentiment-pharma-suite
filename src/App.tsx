@@ -10,6 +10,7 @@ import RawInventory from "./pages/RawInventory";
 import ProcessedInventory from "./pages/ProcessedInventory";
 import Accounting from "./pages/Accounting";
 import Doctors from "./pages/Doctors";
+import LossCalculation from "./pages/LossCalculation";
 import NotFound from "./pages/NotFound";
 import Processing from "./pages/Processing";
 import { Suspense } from "react";
@@ -53,6 +54,7 @@ const App = () => {
                   <Route path="/processing" element={<Processing />} />
                   <Route path="/accounting" element={<Accounting />} />
                   <Route path="/doctors" element={<Doctors />} />
+                  <Route path="/loss-calculation" element={<LossCalculation />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>

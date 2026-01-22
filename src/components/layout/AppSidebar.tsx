@@ -7,7 +7,8 @@ import {
   Settings,
   User,
   LayoutDashboard,
-  Boxes
+  Boxes,
+  Calculator
 } from "lucide-react";
 
 const mainMenuItems = [
@@ -17,6 +18,7 @@ const mainMenuItems = [
   { title: "Processed Inventory", url: "/processed-inventory", icon: Boxes },
   { title: "Accounting", url: "/accounting", icon: Receipt },
   { title: "Doctors", url: "/doctors", icon: Stethoscope },
+  { title: "Loss Calculation", url: "/loss-calculation", icon: Calculator },
 ];
 
 const systemMenuItems = [

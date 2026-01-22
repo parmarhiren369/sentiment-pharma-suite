@@ -19,8 +19,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AutocompleteInput } from "@/components/ui/autocomplete-input";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, Timestamp, query, orderBy, limit, updateDoc, doc } from "firebase/firestore";
+import { collection, addDoc, getDocs, Timestamp, query, orderBy, limit, updateDoc, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 interface RawMaterial {
@@ -93,6 +94,7 @@ export default function Processing() {
   const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
   const [newStatus, setNewStatus] = useState<"in process" | "approved" | "discarded">("in process");
   const [approvedProducedName, setApprovedProducedName] = useState("");
+  const [itemNameSuggestions, setItemNameSuggestions] = useState<string[]>([]);
   const { toast } = useToast();
 
   const fetchRawInventory = async () => {
@@ -110,6 +112,78 @@ export default function Processing() {
       setRawInventory(items);
     } catch (error) {
       console.error("Error fetching inventory:", error);
+    }
+  };
+
+  const fetchItemNameSuggestions = async () => {
+    if (!db) {
+      console.warn("Firebase not initialized");
+      return;
+    }
+    try {
+      const suggestionsRef = collection(db, "itemNameSuggestions");
+      const snapshot = await getDocs(suggestionsRef);
+      const suggestions = snapshot.docs.map((doc) => doc.data().name as string);
+      setItemNameSuggestions(suggestions);
+    } catch (error) {
+      console.error("Error fetching suggestions:", error);
+    }
+  };
+
+  const addItemNameSuggestion = async (name: string) => {
+    if (!db) return;
+    
+    try {
+      // Check if already exists
+      if (itemNameSuggestions.includes(name)) {
+        toast({
+          title: "Info",
+          description: "This item name already exists in suggestions",
+        });
+        return;
+      }
+
+      // Use the name as the document ID to prevent duplicates
+      const suggestionDocRef = doc(db, "itemNameSuggestions", name);
+      await setDoc(suggestionDocRef, {
+        name,
+        createdAt: Timestamp.now(),
+      });
+
+      setItemNameSuggestions([...itemNameSuggestions, name]);
+      toast({
+        title: "Success",
+        description: "Item name added to suggestions",
+      });
+    } catch (error) {
+      console.error("Error adding suggestion:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add suggestion",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const removeItemNameSuggestion = async (name: string) => {
+    if (!db) return;
+    
+    try {
+      const suggestionDocRef = doc(db, "itemNameSuggestions", name);
+      await deleteDoc(suggestionDocRef);
+
+      setItemNameSuggestions(itemNameSuggestions.filter(s => s !== name));
+      toast({
+        title: "Success",
+        description: "Item name removed from suggestions",
+      });
+    } catch (error) {
+      console.error("Error removing suggestion:", error);
+      toast({
+        title: "Error",
+        description: "Failed to remove suggestion",
+        variant: "destructive",
+      });
     }
   };
 
@@ -178,6 +252,7 @@ export default function Processing() {
   useEffect(() => {
     fetchRawInventory();
     fetchBatches();
+    fetchItemNameSuggestions();
     generateBatchNumber().then(setGeneratedBatchNo);
   }, []);
 
@@ -248,9 +323,11 @@ export default function Processing() {
         // Calculate total quantity (sum of all used quantities)
         const totalQuantity = validItems.reduce((sum, item) => sum + item.useQuantity, 0);
         
+        const itemName = producedItemName.trim() || `Finished Batch ${batchNo}`;
+        
         // Create finished good entry using provided produced item name
         await addDoc(processedInventoryRef, {
-          name: producedItemName.trim() || `Finished Batch ${batchNo}`,
+          name: itemName,
           batchNo,
           quantity: totalQuantity.toString(),
           unit: validItems[0]?.unit || "kg",
@@ -260,6 +337,11 @@ export default function Processing() {
           processDate: batchDate,
           createdAt: Timestamp.now(),
         });
+
+        // Automatically add to suggestions if not already there
+        if (producedItemName.trim() && !itemNameSuggestions.includes(producedItemName.trim())) {
+          await addItemNameSuggestion(producedItemName.trim());
+        }
       }
 
       toast({
@@ -372,9 +454,10 @@ export default function Processing() {
 
         const processedInventoryRef = collection(db, "processedInventory");
         const totalQuantity = editingBatch.items.reduce((sum, item) => sum + item.useQuantity, 0);
+        const itemName = approvedProducedName.trim() || `Finished Batch ${editingBatch.batchNo}`;
 
         await addDoc(processedInventoryRef, {
-          name: approvedProducedName.trim() || `Finished Batch ${editingBatch.batchNo}`,
+          name: itemName,
           batchNo: editingBatch.batchNo,
           quantity: totalQuantity.toString(),
           unit: editingBatch.items[0]?.unit || "kg",
@@ -384,6 +467,12 @@ export default function Processing() {
           processDate: new Date().toISOString().split('T')[0],
           createdAt: Timestamp.now(),
         });
+
+        // Automatically add to suggestions if not already there
+        if (approvedProducedName.trim() && !itemNameSuggestions.includes(approvedProducedName.trim())) {
+          await addItemNameSuggestion(approvedProducedName.trim());
+        }
+        
         setApprovedProducedName("");
       }
 
@@ -668,11 +757,14 @@ export default function Processing() {
                   {batchStatus === "approved" && (
                     <div className="mt-3">
                       <Label htmlFor="producedItemName">Produced Item Name *</Label>
-                      <Input
+                      <AutocompleteInput
                         id="producedItemName"
                         value={producedItemName}
-                        onChange={(e) => setProducedItemName(e.target.value)}
-                        placeholder="Enter produced item name"
+                        onChange={setProducedItemName}
+                        suggestions={itemNameSuggestions}
+                        onAddSuggestion={addItemNameSuggestion}
+                        onRemoveSuggestion={removeItemNameSuggestion}
+                        placeholder="Type to search or add new item name"
                         className="mt-2"
                       />
                     </div>
@@ -929,11 +1021,14 @@ export default function Processing() {
                   {newStatus === "approved" && editingBatch.status !== "approved" && (
                     <div className="mt-3">
                       <Label htmlFor="approvedProducedName">Produced Item Name *</Label>
-                      <Input
+                      <AutocompleteInput
                         id="approvedProducedName"
                         value={approvedProducedName}
-                        onChange={(e) => setApprovedProducedName(e.target.value)}
-                        placeholder="Enter produced item name"
+                        onChange={setApprovedProducedName}
+                        suggestions={itemNameSuggestions}
+                        onAddSuggestion={addItemNameSuggestion}
+                        onRemoveSuggestion={removeItemNameSuggestion}
+                        placeholder="Type to search or add new item name"
                         className="mt-2"
                       />
                     </div>

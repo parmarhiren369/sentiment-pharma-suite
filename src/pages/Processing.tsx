@@ -95,6 +95,7 @@ export default function Processing() {
   const [newStatus, setNewStatus] = useState<"in process" | "approved" | "discarded">("in process");
   const [approvedProducedName, setApprovedProducedName] = useState("");
   const [itemNameSuggestions, setItemNameSuggestions] = useState<string[]>([]);
+  const [processedInventoryNames, setProcessedInventoryNames] = useState<string[]>([]);
   const { toast } = useToast();
 
   const fetchRawInventory = async () => {
@@ -127,6 +128,23 @@ export default function Processing() {
       setItemNameSuggestions(suggestions);
     } catch (error) {
       console.error("Error fetching suggestions:", error);
+    }
+  };
+
+  const fetchProcessedInventoryNames = async () => {
+    if (!db) {
+      console.warn("Firebase not initialized");
+      return;
+    }
+    try {
+      const processedRef = collection(db, "processedInventory");
+      const snapshot = await getDocs(processedRef);
+      // Extract unique material names from processed inventory
+      const names = snapshot.docs.map((doc) => doc.data().name as string);
+      const uniqueNames = Array.from(new Set(names)); // Remove duplicates
+      setProcessedInventoryNames(uniqueNames);
+    } catch (error) {
+      console.error("Error fetching processed inventory names:", error);
     }
   };
 
@@ -253,6 +271,7 @@ export default function Processing() {
     fetchRawInventory();
     fetchBatches();
     fetchItemNameSuggestions();
+    fetchProcessedInventoryNames();
     generateBatchNumber().then(setGeneratedBatchNo);
   }, []);
 
@@ -358,6 +377,7 @@ export default function Processing() {
       setIsAddRecipeOpen(false);
       await fetchRawInventory();
       await fetchBatches();
+      await fetchProcessedInventoryNames(); // Refresh processed inventory names
       // Generate new batch number for next batch
       generateBatchNumber().then(setGeneratedBatchNo);
     } catch (error) {
@@ -484,6 +504,7 @@ export default function Processing() {
       setIsEditStatusOpen(false);
       setEditingBatch(null);
       await fetchBatches();
+      await fetchProcessedInventoryNames(); // Refresh processed inventory names
     } catch (error) {
       console.error("Error updating status:", error);
       toast({
@@ -761,10 +782,10 @@ export default function Processing() {
                         id="producedItemName"
                         value={producedItemName}
                         onChange={setProducedItemName}
-                        suggestions={itemNameSuggestions}
+                        suggestions={Array.from(new Set([...processedInventoryNames, ...itemNameSuggestions]))}
                         onAddSuggestion={addItemNameSuggestion}
                         onRemoveSuggestion={removeItemNameSuggestion}
-                        placeholder="Type to search or add new item name"
+                        placeholder="Type to search existing materials or add new"
                         className="mt-2"
                       />
                     </div>
@@ -1025,10 +1046,10 @@ export default function Processing() {
                         id="approvedProducedName"
                         value={approvedProducedName}
                         onChange={setApprovedProducedName}
-                        suggestions={itemNameSuggestions}
+                        suggestions={Array.from(new Set([...processedInventoryNames, ...itemNameSuggestions]))}
                         onAddSuggestion={addItemNameSuggestion}
                         onRemoveSuggestion={removeItemNameSuggestion}
-                        placeholder="Type to search or add new item name"
+                        placeholder="Type to search existing materials or add new"
                         className="mt-2"
                       />
                     </div>

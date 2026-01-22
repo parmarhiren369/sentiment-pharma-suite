@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AutocompleteInput } from "@/components/ui/autocomplete-input";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, Timestamp, query, orderBy, limit, updateDoc, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, Timestamp, query, orderBy, limit, updateDoc, doc, setDoc, deleteDoc, where } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 interface RawMaterial {
@@ -344,18 +344,35 @@ export default function Processing() {
         
         const itemName = producedItemName.trim() || `Finished Batch ${batchNo}`;
         
-        // Create finished good entry using provided produced item name
-        await addDoc(processedInventoryRef, {
-          name: itemName,
-          batchNo,
-          quantity: totalQuantity.toString(),
-          unit: validItems[0]?.unit || "kg",
-          category: "Finished Goods",
-          location: "Production",
-          status: "In Stock",
-          processDate: batchDate,
-          createdAt: Timestamp.now(),
-        });
+        // Check if material with same name already exists
+        const existingQuery = query(processedInventoryRef, where("name", "==", itemName));
+        const existingSnapshot = await getDocs(existingQuery);
+        
+        if (!existingSnapshot.empty) {
+          // Material exists - update the quantity by adding to existing
+          const existingDoc = existingSnapshot.docs[0];
+          const existingData = existingDoc.data();
+          const existingQuantity = parseFloat(existingData.quantity) || 0;
+          const newTotalQuantity = existingQuantity + totalQuantity;
+          
+          await updateDoc(doc(db, "processedInventory", existingDoc.id), {
+            quantity: newTotalQuantity.toString(),
+            lastUpdated: new Date().toISOString().split('T')[0],
+          });
+        } else {
+          // Material doesn't exist - create new entry
+          await addDoc(processedInventoryRef, {
+            name: itemName,
+            batchNo,
+            quantity: totalQuantity.toString(),
+            unit: validItems[0]?.unit || "kg",
+            category: "Finished Goods",
+            location: "Production",
+            status: "In Stock",
+            processDate: batchDate,
+            createdAt: Timestamp.now(),
+          });
+        }
 
         // Automatically add to suggestions if not already there
         if (producedItemName.trim() && !itemNameSuggestions.includes(producedItemName.trim())) {
@@ -476,17 +493,35 @@ export default function Processing() {
         const totalQuantity = editingBatch.items.reduce((sum, item) => sum + item.useQuantity, 0);
         const itemName = approvedProducedName.trim() || `Finished Batch ${editingBatch.batchNo}`;
 
-        await addDoc(processedInventoryRef, {
-          name: itemName,
-          batchNo: editingBatch.batchNo,
-          quantity: totalQuantity.toString(),
-          unit: editingBatch.items[0]?.unit || "kg",
-          category: "Finished Goods",
-          location: "Production",
-          status: "In Stock",
-          processDate: new Date().toISOString().split('T')[0],
-          createdAt: Timestamp.now(),
-        });
+        // Check if material with same name already exists
+        const existingQuery = query(processedInventoryRef, where("name", "==", itemName));
+        const existingSnapshot = await getDocs(existingQuery);
+        
+        if (!existingSnapshot.empty) {
+          // Material exists - update the quantity by adding to existing
+          const existingDoc = existingSnapshot.docs[0];
+          const existingData = existingDoc.data();
+          const existingQuantity = parseFloat(existingData.quantity) || 0;
+          const newTotalQuantity = existingQuantity + totalQuantity;
+          
+          await updateDoc(doc(db, "processedInventory", existingDoc.id), {
+            quantity: newTotalQuantity.toString(),
+            lastUpdated: new Date().toISOString().split('T')[0],
+          });
+        } else {
+          // Material doesn't exist - create new entry
+          await addDoc(processedInventoryRef, {
+            name: itemName,
+            batchNo: editingBatch.batchNo,
+            quantity: totalQuantity.toString(),
+            unit: editingBatch.items[0]?.unit || "kg",
+            category: "Finished Goods",
+            location: "Production",
+            status: "In Stock",
+            processDate: new Date().toISOString().split('T')[0],
+            createdAt: Timestamp.now(),
+          });
+        }
 
         // Automatically add to suggestions if not already there
         if (approvedProducedName.trim() && !itemNameSuggestions.includes(approvedProducedName.trim())) {

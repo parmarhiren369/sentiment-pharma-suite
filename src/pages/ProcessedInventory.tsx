@@ -269,6 +269,14 @@ export default function ProcessedInventory() {
               <p className="section-subtitle">Intermediate products ready for final processing</p>
             </div>
             <div className="flex items-center gap-2">
+              <Button 
+                size="sm" 
+                onClick={() => setIsAddItemOpen(true)}
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Item
+              </Button>
               <Button variant="outline" size="sm" className="gap-2">
                 <Download className="w-4 h-4" />
                 Export
@@ -320,14 +328,6 @@ export default function ProcessedInventory() {
                 >
                   <X className="w-4 h-4" />
                   Clear Filters
-                </Button>
-                <Button 
-                  size="sm" 
-                  onClick={() => setIsAddItemOpen(true)}
-                  className="gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Item
                 </Button>
                 <div className="text-sm text-muted-foreground ml-auto">
                   Showing {filteredData.length} of {allInventoryData.length} items

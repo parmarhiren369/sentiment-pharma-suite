@@ -4,12 +4,13 @@ import {
   Settings as SettingsIcon, 
   Trash2,
   AlertTriangle,
-  Database
+  Database,
+  Plus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { collection, getDocs, deleteDoc, doc, addDoc, Timestamp } from "firebase/firestore";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +24,7 @@ import {
 
 export default function Settings() {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isAddingDummy, setIsAddingDummy] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const { toast } = useToast();
@@ -102,6 +104,240 @@ export default function Settings() {
     setShowConfirmDialog(true);
   };
 
+  const addDummyData = async () => {
+    if (!db) {
+      toast({
+        title: "Error",
+        description: "Database connection not available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsAddingDummy(true);
+    let totalAdded = 0;
+
+    try {
+      // Add dummy raw inventory items
+      const rawInventoryData = [
+        {
+          name: "Paracetamol API",
+          category: "Active Ingredient",
+          quantity: "500",
+          unit: "kg",
+          location: "Warehouse A",
+          status: "Adequate",
+          supplier: "ChemPharma Ltd",
+          lastUpdated: new Date().toISOString().split('T')[0],
+          createdAt: Timestamp.now(),
+        },
+        {
+          name: "Lactose Monohydrate",
+          category: "Excipient",
+          quantity: "1000",
+          unit: "kg",
+          location: "Warehouse A",
+          status: "Adequate",
+          supplier: "BioSupply Co",
+          lastUpdated: new Date().toISOString().split('T')[0],
+          createdAt: Timestamp.now(),
+        },
+        {
+          name: "Microcrystalline Cellulose",
+          category: "Excipient",
+          quantity: "750",
+          unit: "kg",
+          location: "Warehouse B",
+          status: "Adequate",
+          supplier: "ChemPharma Ltd",
+          lastUpdated: new Date().toISOString().split('T')[0],
+          createdAt: Timestamp.now(),
+        },
+        {
+          name: "Magnesium Stearate",
+          category: "Lubricant",
+          quantity: "150",
+          unit: "kg",
+          location: "Warehouse A",
+          status: "Low",
+          supplier: "Global Ingredients",
+          lastUpdated: new Date().toISOString().split('T')[0],
+          createdAt: Timestamp.now(),
+        },
+        {
+          name: "Ibuprofen API",
+          category: "Active Ingredient",
+          quantity: "300",
+          unit: "kg",
+          location: "Warehouse C",
+          status: "Adequate",
+          supplier: "PharmaChem Inc",
+          lastUpdated: new Date().toISOString().split('T')[0],
+          createdAt: Timestamp.now(),
+        },
+      ];
+
+      const rawInventoryRef = collection(db, "rawInventory");
+      for (const item of rawInventoryData) {
+        await addDoc(rawInventoryRef, item);
+        totalAdded++;
+      }
+      console.log(`Added ${rawInventoryData.length} raw inventory items`);
+
+      // Add dummy processed inventory items
+      const processedInventoryData = [
+        {
+          name: "Paracetamol Granules",
+          category: "Finished Goods",
+          quantity: "450",
+          unit: "kg",
+          location: "Production",
+          reorderLevel: "100 kg",
+          status: "In Stock",
+          batchNo: "BTCJAN26001",
+          processedDate: new Date().toISOString().split('T')[0],
+          lastUpdated: new Date().toISOString().split('T')[0],
+          createdAt: Timestamp.now(),
+        },
+        {
+          name: "Ibuprofen Tablets",
+          category: "Finished Goods",
+          quantity: "250",
+          unit: "kg",
+          location: "Production",
+          reorderLevel: "50 kg",
+          status: "In Stock",
+          batchNo: "BTCJAN26002",
+          processedDate: new Date().toISOString().split('T')[0],
+          lastUpdated: new Date().toISOString().split('T')[0],
+          createdAt: Timestamp.now(),
+        },
+        {
+          name: "Paracetamol Tablets 500mg",
+          category: "Finished Goods",
+          quantity: "800",
+          unit: "kg",
+          location: "Production",
+          reorderLevel: "200 kg",
+          status: "In Stock",
+          batchNo: "BTCJAN26003",
+          processedDate: new Date().toISOString().split('T')[0],
+          lastUpdated: new Date().toISOString().split('T')[0],
+          createdAt: Timestamp.now(),
+        },
+      ];
+
+      const processedInventoryRef = collection(db, "processedInventory");
+      for (const item of processedInventoryData) {
+        await addDoc(processedInventoryRef, item);
+        totalAdded++;
+      }
+      console.log(`Added ${processedInventoryData.length} processed inventory items`);
+
+      // Add dummy item name suggestions
+      const suggestionsData = [
+        { name: "Paracetamol Granules", createdAt: Timestamp.now() },
+        { name: "Ibuprofen Tablets", createdAt: Timestamp.now() },
+        { name: "Paracetamol Tablets 500mg", createdAt: Timestamp.now() },
+        { name: "Aspirin Granules", createdAt: Timestamp.now() },
+        { name: "Amoxicillin Powder", createdAt: Timestamp.now() },
+      ];
+
+      const suggestionsRef = collection(db, "itemNameSuggestions");
+      for (const suggestion of suggestionsData) {
+        await addDoc(suggestionsRef, suggestion);
+        totalAdded++;
+      }
+      console.log(`Added ${suggestionsData.length} item suggestions`);
+
+      // Add dummy batches
+      const batchesData = [
+        {
+          batchNo: "BTCJAN26001",
+          manualBatchNo: "MAN-2026-001",
+          items: [
+            {
+              rawItemId: "dummy-id-1",
+              rawItemName: "Paracetamol API",
+              currentQuantity: 500,
+              unit: "kg",
+              useQuantity: 50,
+            },
+          ],
+          status: "approved",
+          batchDate: new Date().toISOString().split('T')[0],
+          createdAt: Timestamp.now(),
+        },
+        {
+          batchNo: "BTCJAN26002",
+          manualBatchNo: "MAN-2026-002",
+          items: [
+            {
+              rawItemId: "dummy-id-2",
+              rawItemName: "Ibuprofen API",
+              currentQuantity: 300,
+              unit: "kg",
+              useQuantity: 50,
+            },
+          ],
+          status: "approved",
+          batchDate: new Date().toISOString().split('T')[0],
+          createdAt: Timestamp.now(),
+        },
+        {
+          batchNo: "BTCJAN26003",
+          manualBatchNo: null,
+          items: [
+            {
+              rawItemId: "dummy-id-1",
+              rawItemName: "Paracetamol API",
+              currentQuantity: 500,
+              unit: "kg",
+              useQuantity: 100,
+            },
+            {
+              rawItemId: "dummy-id-2",
+              rawItemName: "Lactose Monohydrate",
+              currentQuantity: 1000,
+              unit: "kg",
+              useQuantity: 200,
+            },
+          ],
+          status: "in process",
+          batchDate: new Date().toISOString().split('T')[0],
+          createdAt: Timestamp.now(),
+        },
+      ];
+
+      const batchesRef = collection(db, "batches");
+      for (const batch of batchesData) {
+        await addDoc(batchesRef, batch);
+        totalAdded++;
+      }
+      console.log(`Added ${batchesData.length} batches`);
+
+      toast({
+        title: "Success",
+        description: `Dummy data added successfully! ${totalAdded} records created.`,
+      });
+
+      // Refresh the page after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+
+    } catch (error) {
+      console.error("Error adding dummy data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add dummy data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingDummy(false);
+    }
+  };
+
   return (
     <>
       <AppHeader 
@@ -127,7 +363,7 @@ export default function Settings() {
             </div>
 
             <div className="p-6">
-              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6">
+              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6 mb-6">
                 <div className="flex items-start gap-4">
                   <div className="h-12 w-12 rounded-full bg-destructive/20 flex items-center justify-center flex-shrink-0">
                     <AlertTriangle className="h-6 w-6 text-destructive" />
@@ -167,6 +403,52 @@ export default function Settings() {
                       </Button>
                       <p className="text-xs text-muted-foreground">
                         This action cannot be undone
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-6">
+                <div className="flex items-start gap-4">
+                  <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                    <Plus className="h-6 w-6 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-foreground mb-2">Test Data</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Add dummy data for testing purposes. This will create:
+                    </p>
+                    <ul className="text-sm text-muted-foreground space-y-1 mb-6 ml-4">
+                      <li className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
+                        5 raw inventory items (APIs, excipients, lubricants)
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
+                        3 processed inventory items (finished goods)
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
+                        3 batch records (approved and in-process)
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
+                        5 item name suggestions
+                      </li>
+                    </ul>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="default"
+                        onClick={addDummyData}
+                        disabled={isAddingDummy}
+                        className="gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {isAddingDummy ? "Adding..." : "Add Dummy Data"}
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Great for testing and demos
                       </p>
                     </div>
                   </div>

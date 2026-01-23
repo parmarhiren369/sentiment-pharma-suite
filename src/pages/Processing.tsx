@@ -359,9 +359,14 @@ export default function Processing() {
             quantity: newTotalQuantity.toString(),
             lastUpdated: new Date().toISOString().split('T')[0],
           });
+          
+          console.log(`Updated existing product - ID: ${existingData.productId || existingDoc.id}, Name: ${itemName}, New Total: ${newTotalQuantity}kg`);
         } else {
-          // Material doesn't exist - create new entry
+          // Material doesn't exist - create new entry with unique product ID
+          const productId = `PROD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+          
           await addDoc(processedInventoryRef, {
+            productId,
             name: itemName,
             batchNo,
             quantity: totalQuantity.toString(),
@@ -372,6 +377,8 @@ export default function Processing() {
             processDate: batchDate,
             createdAt: Timestamp.now(),
           });
+          
+          console.log(`Created new product - ID: ${productId}, Name: ${itemName}, Quantity: ${totalQuantity}kg`);
         }
 
         // Automatically add to suggestions if not already there
@@ -508,9 +515,14 @@ export default function Processing() {
             quantity: newTotalQuantity.toString(),
             lastUpdated: new Date().toISOString().split('T')[0],
           });
+          
+          console.log(`Updated existing product - ID: ${existingData.productId || existingDoc.id}, Name: ${itemName}, New Total: ${newTotalQuantity}kg`);
         } else {
-          // Material doesn't exist - create new entry
+          // Material doesn't exist - create new entry with unique product ID
+          const productId = `PROD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+          
           await addDoc(processedInventoryRef, {
+            productId,
             name: itemName,
             batchNo: editingBatch.batchNo,
             quantity: totalQuantity.toString(),
@@ -521,6 +533,8 @@ export default function Processing() {
             processDate: new Date().toISOString().split('T')[0],
             createdAt: Timestamp.now(),
           });
+          
+          console.log(`Created new product - ID: ${productId}, Name: ${itemName}, Quantity: ${totalQuantity}kg`);
         }
 
         // Automatically add to suggestions if not already there

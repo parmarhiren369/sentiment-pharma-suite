@@ -861,37 +861,19 @@ export default function Processing() {
                     </SelectContent>
                   </Select>
                   {batchStatus === "approved" && (
-                    <>
-                      <div className="mt-3">
-                        <Label htmlFor="producedItemName">Produced Item Name *</Label>
-                        <AutocompleteInput
-                          id="producedItemName"
-                          value={producedItemName}
-                          onChange={setProducedItemName}
-                          suggestions={Array.from(new Set([...processedInventoryNames, ...itemNameSuggestions]))}
-                          onAddSuggestion={addItemNameSuggestion}
-                          onRemoveSuggestion={removeItemNameSuggestion}
-                          placeholder="Type to search existing materials or add new"
-                          className="mt-2"
-                        />
-                      </div>
-                      <div className="mt-3">
-                        <Label htmlFor="actualOutputQuantityCreate">Actual Output Quantity (kg) *</Label>
-                        <Input
-                          id="actualOutputQuantityCreate"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={actualOutputQuantity}
-                          onChange={(e) => setActualOutputQuantity(e.target.value)}
-                          placeholder="Enter actual produced quantity"
-                          className="mt-2"
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Total input will be calculated from materials below
-                        </p>
-                      </div>
-                    </>
+                    <div className="mt-3">
+                      <Label htmlFor="producedItemName">Produced Item Name *</Label>
+                      <AutocompleteInput
+                        id="producedItemName"
+                        value={producedItemName}
+                        onChange={setProducedItemName}
+                        suggestions={Array.from(new Set([...processedInventoryNames, ...itemNameSuggestions]))}
+                        onAddSuggestion={addItemNameSuggestion}
+                        onRemoveSuggestion={removeItemNameSuggestion}
+                        placeholder="Type to search existing materials or add new"
+                        className="mt-2"
+                      />
+                    </div>
                   )}
                 </div>
 
@@ -975,6 +957,26 @@ export default function Processing() {
                   <Plus className="h-4 w-4" />
                   Add Another Raw Item
                 </Button>
+
+                {/* Actual Output Quantity - Only show for approved status */}
+                {batchStatus === "approved" && (
+                  <div className="mt-4 p-4 border border-primary/30 rounded-lg bg-primary/5">
+                    <Label htmlFor="actualOutputQuantityCreate">Actual Output Quantity (kg) *</Label>
+                    <Input
+                      id="actualOutputQuantityCreate"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={actualOutputQuantity}
+                      onChange={(e) => setActualOutputQuantity(e.target.value)}
+                      placeholder="Enter actual produced quantity"
+                      className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Total input: {batchItems.reduce((sum, item) => sum + item.useQuantity, 0).toFixed(2)} kg
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Summary */}

@@ -302,15 +302,28 @@ export default function Processing() {
     try {
       const batchNo = await generateBatchNumber();
 
-      // If creating an approved batch, ensure produced item name is provided
-      if (batchStatus === "approved" && producedItemName.trim() === "") {
-        toast({
-          title: "Error",
-          description: "Please enter the produced item name for approved batches",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
+      // If creating an approved batch, ensure produced item name and actual output quantity are provided
+      if (batchStatus === "approved") {
+        if (producedItemName.trim() === "") {
+          toast({
+            title: "Error",
+            description: "Please enter the produced item name for approved batches",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
+        const outputQty = parseFloat(actualOutputQuantity);
+        if (!actualOutputQuantity || isNaN(outputQty) || outputQty <= 0) {
+          toast({
+            title: "Error",
+            description: "Please enter a valid actual output quantity",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
       }
 
       // Save batch to Firebase
@@ -322,6 +335,7 @@ export default function Processing() {
         status: batchStatus,
         batchDate,
         createdAt: Timestamp.now(),
+        ...(batchStatus === "approved" ? { actualOutputQuantity: parseFloat(actualOutputQuantity) } : {}),
       });
 
       // Update raw inventory quantities
@@ -340,8 +354,8 @@ export default function Processing() {
       if (batchStatus === "approved") {
         const processedInventoryRef = collection(db, "processedInventory");
         
-        // Calculate total quantity (sum of all used quantities)
-        const totalQuantity = validItems.reduce((sum, item) => sum + item.useQuantity, 0);
+        // Use actual output quantity instead of sum of inputs
+        const totalQuantity = parseFloat(actualOutputQuantity);
         
         const itemName = producedItemName.trim() || `Finished Batch ${batchNo}`;
         
@@ -397,6 +411,7 @@ export default function Processing() {
       setBatchItems([{ rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }]);
       setManualBatchNo("");
       setProducedItemName("");
+      setActualOutputQuantity("");
       setBatchDate(new Date().toISOString().split('T')[0]);
       setBatchStatus("in process");
       setIsAddRecipeOpen(false);
@@ -846,19 +861,37 @@ export default function Processing() {
                     </SelectContent>
                   </Select>
                   {batchStatus === "approved" && (
-                    <div className="mt-3">
-                      <Label htmlFor="producedItemName">Produced Item Name *</Label>
-                      <AutocompleteInput
-                        id="producedItemName"
-                        value={producedItemName}
-                        onChange={setProducedItemName}
-                        suggestions={Array.from(new Set([...processedInventoryNames, ...itemNameSuggestions]))}
-                        onAddSuggestion={addItemNameSuggestion}
-                        onRemoveSuggestion={removeItemNameSuggestion}
-                        placeholder="Type to search existing materials or add new"
-                        className="mt-2"
-                      />
-                    </div>
+                    <>
+                      <div className="mt-3">
+                        <Label htmlFor="producedItemName">Produced Item Name *</Label>
+                        <AutocompleteInput
+                          id="producedItemName"
+                          value={producedItemName}
+                          onChange={setProducedItemName}
+                          suggestions={Array.from(new Set([...processedInventoryNames, ...itemNameSuggestions]))}
+                          onAddSuggestion={addItemNameSuggestion}
+                          onRemoveSuggestion={removeItemNameSuggestion}
+                          placeholder="Type to search existing materials or add new"
+                          className="mt-2"
+                        />
+                      </div>
+                      <div className="mt-3">
+                        <Label htmlFor="actualOutputQuantityCreate">Actual Output Quantity (kg) *</Label>
+                        <Input
+                          id="actualOutputQuantityCreate"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={actualOutputQuantity}
+                          onChange={(e) => setActualOutputQuantity(e.target.value)}
+                          placeholder="Enter actual produced quantity"
+                          className="mt-2"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Total input will be calculated from materials below
+                        </p>
+                      </div>
+                    </>
                   )}
                 </div>
 
@@ -963,9 +996,9 @@ export default function Processing() {
               <Button variant="outline" onClick={() => {
                 setIsAddRecipeOpen(false);
                 setBatchItems([{ rawItemId: "", rawItemName: "", currentQuantity: 0, unit: "", useQuantity: 0 }]);
-
                 setManualBatchNo("");
                 setProducedItemName("");
+                setActualOutputQuantity("");
                 setBatchDate(new Date().toISOString().split("T")[0]);
                 setBatchStatus("in process");
               }}>

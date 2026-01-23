@@ -32,6 +32,7 @@ interface Batch {
   createdAt: Date;
   status: string;
   batchDate: string;
+  actualOutputQuantity?: number;
 }
 
 interface ProcessedInventoryItem {
@@ -96,31 +97,38 @@ export default function LossCalculation() {
       const calculations: LossCalculationData[] = [];
 
       batches.forEach((batch) => {
+        // Only process approved batches that have actual output quantity
+        if (batch.status !== 'approved' || !batch.actualOutputQuantity) {
+          return;
+        }
+
         // Find corresponding processed inventory item
         const processedItem = processedInventory.find(item => item.batchNo === batch.batchNo);
 
-        batch.items.forEach((item) => {
-          const totalRawUsed = item.useQuantity;
-          const productQuantity = processedItem ? parseFloat(processedItem.quantity) : 0;
-          
-          // Calculate loss (total raw used - product quantity)
-          const loss = totalRawUsed - (productQuantity / batch.items.length); // Divide by number of items
-          const lossPercentage = totalRawUsed > 0 ? (loss / totalRawUsed) * 100 : 0;
+        // Calculate total raw materials used
+        const totalRawUsed = batch.items.reduce((sum, item) => sum + item.useQuantity, 0);
+        
+        // Use the actual output quantity from the batch
+        const actualOutput = batch.actualOutputQuantity;
+        
+        // Calculate total loss (input - output)
+        const totalLoss = totalRawUsed - actualOutput;
+        const lossPercentage = totalRawUsed > 0 ? (totalLoss / totalRawUsed) * 100 : 0;
 
-          calculations.push({
-            id: `${batch.id}-${item.rawItemId}`,
-            batchNo: batch.batchNo,
-            manualBatchNo: batch.manualBatchNo,
-            rawMaterialName: item.rawItemName,
-            rawMaterialUsed: totalRawUsed,
-            unit: item.unit,
-            productName: processedItem?.name || "N/A",
-            productQuantity: productQuantity / batch.items.length,
-            lossQuantity: loss,
-            lossPercentage: Math.max(0, lossPercentage),
-            status: batch.status,
-            date: batch.batchDate || new Date(batch.createdAt).toISOString().split('T')[0],
-          });
+        // Create one entry per batch showing overall loss
+        calculations.push({
+          id: batch.id,
+          batchNo: batch.batchNo,
+          manualBatchNo: batch.manualBatchNo,
+          rawMaterialName: batch.items.map(item => item.rawItemName).join(', '),
+          rawMaterialUsed: totalRawUsed,
+          unit: batch.items[0]?.unit || 'kg',
+          productName: processedItem?.name || "N/A",
+          productQuantity: actualOutput,
+          lossQuantity: totalLoss,
+          lossPercentage: Math.max(0, lossPercentage),
+          status: batch.status,
+          date: batch.batchDate || new Date(batch.createdAt).toISOString().split('T')[0],
         });
       });
 

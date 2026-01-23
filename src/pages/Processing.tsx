@@ -94,6 +94,7 @@ export default function Processing() {
   const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
   const [newStatus, setNewStatus] = useState<"in process" | "approved" | "discarded">("in process");
   const [approvedProducedName, setApprovedProducedName] = useState("");
+  const [actualOutputQuantity, setActualOutputQuantity] = useState<string>("");
   const [itemNameSuggestions, setItemNameSuggestions] = useState<string[]>([]);
   const [processedInventoryNames, setProcessedInventoryNames] = useState<string[]>([]);
   const { toast } = useToast();
@@ -470,6 +471,7 @@ export default function Processing() {
     setEditingBatch(batch);
     setNewStatus(batch.status as "in process" | "approved" | "discarded");
     setApprovedProducedName("");
+    setActualOutputQuantity("");
     setIsEditStatusOpen(true);
   };
 
@@ -478,12 +480,7 @@ export default function Processing() {
 
     setLoading(true);
     try {
-      const batchDocRef = doc(db, "batches", editingBatch.id);
-      await updateDoc(batchDocRef, {
-        status: newStatus,
-      });
-
-      // If status changed to approved, create/update finished goods in processed inventory
+      // If status changed to approved, validate required fields
       if (newStatus === "approved" && editingBatch.status !== "approved") {
         // Ensure approved produced name provided
         if (approvedProducedName.trim() === "") {
@@ -496,8 +493,31 @@ export default function Processing() {
           return;
         }
 
+        // Ensure actual output quantity is provided
+        const outputQty = parseFloat(actualOutputQuantity);
+        if (!actualOutputQuantity || isNaN(outputQty) || outputQty <= 0) {
+          toast({
+            title: "Error",
+            description: "Please enter a valid actual output quantity",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
+      const batchDocRef = doc(db, "batches", editingBatch.id);
+      await updateDoc(batchDocRef, {
+        status: newStatus,
+        ...(newStatus === "approved" && editingBatch.status !== "approved" 
+          ? { actualOutputQuantity: parseFloat(actualOutputQuantity) } 
+          : {}),
+      });
+
+      // If status changed to approved, create/update finished goods in processed inventory
+      if (newStatus === "approved" && editingBatch.status !== "approved") {
         const processedInventoryRef = collection(db, "processedInventory");
-        const totalQuantity = editingBatch.items.reduce((sum, item) => sum + item.useQuantity, 0);
+        const totalQuantity = parseFloat(actualOutputQuantity);
         const itemName = approvedProducedName.trim() || `Finished Batch ${editingBatch.batchNo}`;
 
         // Check if material with same name already exists
@@ -543,6 +563,7 @@ export default function Processing() {
         }
         
         setApprovedProducedName("");
+        setActualOutputQuantity("");
       }
 
       toast({
@@ -1089,19 +1110,37 @@ export default function Processing() {
                     </SelectContent>
                   </Select>
                   {newStatus === "approved" && editingBatch.status !== "approved" && (
-                    <div className="mt-3">
-                      <Label htmlFor="approvedProducedName">Produced Item Name *</Label>
-                      <AutocompleteInput
-                        id="approvedProducedName"
-                        value={approvedProducedName}
-                        onChange={setApprovedProducedName}
-                        suggestions={Array.from(new Set([...processedInventoryNames, ...itemNameSuggestions]))}
-                        onAddSuggestion={addItemNameSuggestion}
-                        onRemoveSuggestion={removeItemNameSuggestion}
-                        placeholder="Type to search existing materials or add new"
-                        className="mt-2"
-                      />
-                    </div>
+                    <>
+                      <div className="mt-3">
+                        <Label htmlFor="approvedProducedName">Produced Item Name *</Label>
+                        <AutocompleteInput
+                          id="approvedProducedName"
+                          value={approvedProducedName}
+                          onChange={setApprovedProducedName}
+                          suggestions={Array.from(new Set([...processedInventoryNames, ...itemNameSuggestions]))}
+                          onAddSuggestion={addItemNameSuggestion}
+                          onRemoveSuggestion={removeItemNameSuggestion}
+                          placeholder="Type to search existing materials or add new"
+                          className="mt-2"
+                        />
+                      </div>
+                      <div className="mt-3">
+                        <Label htmlFor="actualOutputQuantity">Actual Output Quantity (kg) *</Label>
+                        <Input
+                          id="actualOutputQuantity"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={actualOutputQuantity}
+                          onChange={(e) => setActualOutputQuantity(e.target.value)}
+                          placeholder="Enter actual produced quantity"
+                          className="mt-2"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Total input: {editingBatch.items.reduce((sum, item) => sum + item.useQuantity, 0).toFixed(2)} kg
+                        </p>
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -1111,6 +1150,7 @@ export default function Processing() {
                 setIsEditStatusOpen(false);
                 setEditingBatch(null);
                 setApprovedProducedName("");
+                setActualOutputQuantity("");
               }}>
                 Cancel
               </Button>

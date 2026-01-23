@@ -335,7 +335,10 @@ export default function Processing() {
         status: batchStatus,
         batchDate,
         createdAt: Timestamp.now(),
-        ...(batchStatus === "approved" ? { actualOutputQuantity: parseFloat(actualOutputQuantity) } : {}),
+        ...(batchStatus === "approved" ? { 
+          actualOutputQuantity: parseFloat(actualOutputQuantity),
+          producedItemName: producedItemName.trim() || `Finished Batch ${batchNo}`
+        } : {}),
       });
 
       // Update raw inventory quantities
@@ -525,7 +528,10 @@ export default function Processing() {
       await updateDoc(batchDocRef, {
         status: newStatus,
         ...(newStatus === "approved" && editingBatch.status !== "approved" 
-          ? { actualOutputQuantity: parseFloat(actualOutputQuantity) } 
+          ? { 
+              actualOutputQuantity: parseFloat(actualOutputQuantity),
+              producedItemName: approvedProducedName.trim() || `Finished Batch ${editingBatch.batchNo}`
+            } 
           : {}),
       });
 

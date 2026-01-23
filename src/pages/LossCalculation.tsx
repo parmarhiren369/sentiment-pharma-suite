@@ -33,6 +33,7 @@ interface Batch {
   status: string;
   batchDate: string;
   actualOutputQuantity?: number;
+  producedItemName?: string;
 }
 
 interface ProcessedInventoryItem {
@@ -123,7 +124,7 @@ export default function LossCalculation() {
           rawMaterialName: batch.items.map(item => item.rawItemName).join(', '),
           rawMaterialUsed: totalRawUsed,
           unit: batch.items[0]?.unit || 'kg',
-          productName: processedItem?.name || "N/A",
+          productName: batch.producedItemName || processedItem?.name || "N/A",
           productQuantity: actualOutput,
           lossQuantity: totalLoss,
           lossPercentage: Math.max(0, lossPercentage),

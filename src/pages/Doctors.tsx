@@ -20,9 +20,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { db, auth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, query } from "firebase/firestore";
-import { createUserWithEmailAndPassword } from "firebase/auth";
 
 type TabType = "all" | "active" | "meetings";
 
@@ -107,18 +106,13 @@ export default function Doctors() {
 
     setIsLoading(true);
     try {
-      if (!db || !auth) {
+      if (!db) {
         throw new Error("Firebase not initialized");
       }
 
-      // Create auth user for doctor
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        newDoctor.email,
-        newDoctor.password
-      );
-
-      // Add doctor to Firestore
+      // Store doctor credentials in Firestore (will be used for login validation)
+      // Note: In production, you should use Firebase Admin SDK or Cloud Functions
+      // to create user accounts without affecting current session
       const doctorData = {
         name: newDoctor.name,
         specialization: newDoctor.specialization,
@@ -127,10 +121,10 @@ export default function Doctors() {
         phone: newDoctor.phone,
         email: newDoctor.email,
         loginId: newDoctor.loginId,
+        password: newDoctor.password, // In production, hash this password
         status: newDoctor.status,
         lastVisit: "Never",
         prescriptions: 0,
-        userId: userCredential.user.uid,
         createdAt: new Date().toISOString(),
       };
 

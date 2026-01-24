@@ -20,9 +20,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { DataTable } from "@/components/tables/DataTable";
 import { StatCard } from "@/components/cards/StatCard";
 import { useToast } from "@/hooks/use-toast";
-import { db, auth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, query, where, orderBy } from "firebase/firestore";
-import { signOut } from "firebase/auth";
 
 interface Patient {
   id: string;
@@ -168,20 +167,13 @@ export default function DoctorDashboard() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      if (auth) {
-        await signOut(auth);
-      }
-      localStorage.removeItem("currentDoctor");
-      navigate("/doctor-login");
-      toast({
-        title: "Logged Out",
-        description: "You have been successfully logged out",
-      });
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
+  const handleLogout = () => {
+    localStorage.removeItem("currentDoctor");
+    navigate("/doctor-login");
+    toast({
+      title: "Logged Out",
+      description: "You have been successfully logged out",
+    });
   };
 
   const filteredPatients = patients.filter(patient =>

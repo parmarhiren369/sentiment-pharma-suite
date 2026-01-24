@@ -6,8 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { auth, db } from "@/lib/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 
 export default function DoctorLogin() {
@@ -31,7 +30,7 @@ export default function DoctorLogin() {
 
     setIsLoading(true);
     try {
-      if (!auth || !db) {
+      if (!db) {
         throw new Error("Firebase not initialized");
       }
 
@@ -47,8 +46,11 @@ export default function DoctorLogin() {
       const doctorDoc = querySnapshot.docs[0];
       const doctorData = doctorDoc.data();
 
-      // Sign in with email and password
-      await signInWithEmailAndPassword(auth, doctorData.email, password);
+      // Validate password
+      // Note: In production, use proper password hashing (bcrypt, etc.)
+      if (doctorData.password !== password) {
+        throw new Error("Invalid login credentials");
+      }
 
       // Store doctor info in localStorage
       localStorage.setItem("currentDoctor", JSON.stringify({

@@ -21,7 +21,7 @@ import { DataTable } from "@/components/tables/DataTable";
 import { StatCard } from "@/components/cards/StatCard";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, query, where, orderBy } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, where } from "firebase/firestore";
 
 interface Patient {
   id: string;
@@ -81,13 +81,18 @@ export default function DoctorDashboard() {
       const patientsRef = collection(db, "patients");
       const q = query(
         patientsRef, 
-        where("doctorId", "==", doctorId),
-        orderBy("createdAt", "desc")
+        where("doctorId", "==", doctorId)
       );
       const querySnapshot = await getDocs(q);
       const patientsData: Patient[] = [];
       querySnapshot.forEach((doc) => {
         patientsData.push({ id: doc.id, ...doc.data() } as Patient);
+      });
+      // Sort in memory instead of in query to avoid needing a composite index
+      patientsData.sort((a, b) => {
+        const dateA = new Date(a.createdAt).getTime();
+        const dateB = new Date(b.createdAt).getTime();
+        return dateB - dateA; // Descending order (newest first)
       });
       setPatients(patientsData);
     } catch (error) {

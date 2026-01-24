@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
@@ -15,6 +15,14 @@ import {
   MapPin
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { db, auth } from "@/lib/firebase";
+import { collection, addDoc, getDocs, query } from "firebase/firestore";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 
 type TabType = "all" | "active" | "meetings";
 
@@ -29,6 +37,8 @@ interface Doctor {
   status: "Active" | "Inactive" | "New";
   lastVisit: string;
   prescriptions: number;
+  loginId?: string;
+  createdAt?: string;
 }
 
 interface Meeting {
@@ -48,6 +58,114 @@ const meetings: Meeting[] = [];
 
 export default function Doctors() {
   const [activeTab, setActiveTab] = useState<TabType>("all");
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+  
+  const [newDoctor, setNewDoctor] = useState({
+    name: "",
+    specialization: "",
+    hospital: "",
+    city: "",
+    phone: "",
+    email: "",
+    loginId: "",
+    password: "",
+    status: "New" as const,
+  });
+
+  useEffect(() => {
+    loadDoctors();
+  }, []);
+
+  const loadDoctors = async () => {
+    try {
+      if (!db) return;
+      const doctorsRef = collection(db, "doctors");
+      const q = query(doctorsRef);
+      const querySnapshot = await getDocs(q);
+      const doctorsData: Doctor[] = [];
+      querySnapshot.forEach((doc) => {
+        doctorsData.push({ id: doc.id, ...doc.data() } as Doctor);
+      });
+      setDoctors(doctorsData);
+    } catch (error) {
+      console.error("Error loading doctors:", error);
+    }
+  };
+
+  const handleAddDoctor = async () => {
+    if (!newDoctor.name || !newDoctor.email || !newDoctor.loginId || !newDoctor.password) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      if (!db || !auth) {
+        throw new Error("Firebase not initialized");
+      }
+
+      // Create auth user for doctor
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        newDoctor.email,
+        newDoctor.password
+      );
+
+      // Add doctor to Firestore
+      const doctorData = {
+        name: newDoctor.name,
+        specialization: newDoctor.specialization,
+        hospital: newDoctor.hospital,
+        city: newDoctor.city,
+        phone: newDoctor.phone,
+        email: newDoctor.email,
+        loginId: newDoctor.loginId,
+        status: newDoctor.status,
+        lastVisit: "Never",
+        prescriptions: 0,
+        userId: userCredential.user.uid,
+        createdAt: new Date().toISOString(),
+      };
+
+      await addDoc(collection(db, "doctors"), doctorData);
+
+      toast({
+        title: "Doctor Added Successfully",
+        description: `Dr. ${newDoctor.name} has been added to the system`,
+      });
+
+      setIsAddDoctorOpen(false);
+      setNewDoctor({
+        name: "",
+        specialization: "",
+        hospital: "",
+        city: "",
+        phone: "",
+        email: "",
+        loginId: "",
+        password: "",
+        status: "New",
+      });
+      
+      loadDoctors();
+    } catch (error: any) {
+      console.error("Error adding doctor:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add doctor",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const doctorColumns = [
     { 
@@ -224,10 +342,143 @@ export default function Doctors() {
                 <Filter className="w-4 h-4" />
                 Filter
               </Button>
-              <Button size="sm" className="gap-2">
-                <Plus className="w-4 h-4" />
-                Add Doctor
-              </Button>
+              <Dialog open={isAddDoctorOpen} onOpenChange={setIsAddDoctorOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="gap-2">
+                    <Plus className="w-4 h-4" />
+                    Add Doctor
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Add New Doctor</DialogTitle>
+                    <DialogDescription>
+                      Enter doctor details and create login credentials
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Full Name *</Label>
+                        <Input
+                          id="name"
+                          placeholder="Dr. John Smith"
+                          value={newDoctor.name}
+                          onChange={(e) => setNewDoctor({ ...newDoctor, name: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="specialization">Specialization</Label>
+                        <Input
+                          id="specialization"
+                          placeholder="Cardiologist"
+                          value={newDoctor.specialization}
+                          onChange={(e) => setNewDoctor({ ...newDoctor, specialization: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="hospital">Hospital</Label>
+                        <Input
+                          id="hospital"
+                          placeholder="City Hospital"
+                          value={newDoctor.hospital}
+                          onChange={(e) => setNewDoctor({ ...newDoctor, hospital: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="city">City</Label>
+                        <Input
+                          id="city"
+                          placeholder="New York"
+                          value={newDoctor.city}
+                          onChange={(e) => setNewDoctor({ ...newDoctor, city: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Phone</Label>
+                        <Input
+                          id="phone"
+                          placeholder="+1 234 567 8900"
+                          value={newDoctor.phone}
+                          onChange={(e) => setNewDoctor({ ...newDoctor, phone: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email *</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          placeholder="doctor@hospital.com"
+                          value={newDoctor.email}
+                          onChange={(e) => setNewDoctor({ ...newDoctor, email: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-4 mt-2">
+                      <h4 className="font-medium mb-3">Login Credentials</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="loginId">Login ID *</Label>
+                          <Input
+                            id="loginId"
+                            placeholder="doctor123"
+                            value={newDoctor.loginId}
+                            onChange={(e) => setNewDoctor({ ...newDoctor, loginId: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="password">Password *</Label>
+                          <Input
+                            id="password"
+                            type="password"
+                            placeholder="••••••••"
+                            value={newDoctor.password}
+                            onChange={(e) => setNewDoctor({ ...newDoctor, password: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="status">Status</Label>
+                      <Select
+                        value={newDoctor.status}
+                        onValueChange={(value: "Active" | "Inactive" | "New") => 
+                          setNewDoctor({ ...newDoctor, status: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="New">New</SelectItem>
+                          <SelectItem value="Active">Active</SelectItem>
+                          <SelectItem value="Inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsAddDoctorOpen(false)}
+                      disabled={isLoading}
+                    >
+                      Cancel
+                    </Button>
+                    <Button onClick={handleAddDoctor} disabled={isLoading}>
+                      {isLoading ? "Adding..." : "Add Doctor"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
 

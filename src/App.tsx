@@ -14,6 +14,8 @@ import LossCalculation from "./pages/LossCalculation";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import Processing from "./pages/Processing";
+import DoctorLogin from "./pages/DoctorLogin";
+import DoctorDashboard from "./pages/DoctorDashboard";
 import { Suspense } from "react";
 
 console.log("App.tsx loaded");
@@ -48,6 +50,8 @@ const App = () => {
             <Sonner />
             <BrowserRouter>
               <Routes>
+                <Route path="/doctor-login" element={<DoctorLogin />} />
+                <Route path="/doctor-dashboard" element={<DoctorDashboard />} />
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Index />} />
                   <Route path="/raw-inventory" element={<RawInventory />} />

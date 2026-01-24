@@ -8,7 +8,8 @@ import {
   User,
   LayoutDashboard,
   Boxes,
-  Calculator
+  Calculator,
+  LogIn
 } from "lucide-react";
 
 const mainMenuItems = [
@@ -24,6 +25,7 @@ const mainMenuItems = [
 const systemMenuItems = [
   { title: "Settings", url: "/settings", icon: Settings },
   { title: "Profile", url: "/profile", icon: User },
+  { title: "Doctor Login", url: "/doctor-login", icon: LogIn },
 ];
 
 export function AppSidebar() {

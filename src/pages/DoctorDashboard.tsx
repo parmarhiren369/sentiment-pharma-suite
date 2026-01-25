@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { database } from "@/lib/firebase";
-import { ref, set, get, onValue } from "firebase/database";
+import { db } from "@/lib/firebase";
+import { collection, doc, setDoc, onSnapshot, query, getDocs } from "firebase/firestore";
 
 type View = "dashboard" | "add" | "history";
 
@@ -46,35 +46,35 @@ export default function DoctorDashboard() {
     setCurrentDoctor(doctor);
     
     console.log("Doctor logged in:", doctor);
-    console.log("Firebase database initialized:", !!database);
+    console.log("Firestore initialized:", !!db);
     
-    // Load patients from Firebase Realtime Database
-    if (database) {
-      const patientsRef = ref(database, `doctors/${doctor.id}/patients`);
-      console.log("Setting up Firebase listener for path:", `doctors/${doctor.id}/patients`);
-      const unsubscribe = onValue(patientsRef, (snapshot) => {
-        const data = snapshot.val();
-        console.log("Firebase data received:", data);
-        if (data) {
-          const patientsArray = Object.keys(data).map(key => {
-            const patientData = data[key];
-            return {
-              ...patientData,
-              id: key,
-              histories: patientData.histories || []
-            } as Patient;
-          });
-          console.log("Patients loaded:", patientsArray);
-          setPatients(patientsArray);
-        } else {
-          console.log("No patients found in Firebase");
-          setPatients([]);
-        }
+    // Load patients from Firestore
+    if (db) {
+      const patientsRef = collection(db, "doctors", doctor.id, "patients");
+      console.log("Setting up Firestore listener for patients");
+      const unsubscribe = onSnapshot(patientsRef, (snapshot) => {
+        console.log("Firestore data received, docs count:", snapshot.docs.length);
+        const patientsArray = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            name: data.name,
+            age: data.age,
+            gender: data.gender,
+            phone: data.phone,
+            notes: data.notes,
+            histories: data.histories || []
+          } as Patient;
+        });
+        console.log("Patients loaded:", patientsArray);
+        setPatients(patientsArray);
+      }, (error) => {
+        console.error("Firestore listener error:", error);
       });
       
       return () => unsubscribe();
     } else {
-      console.error("Firebase database not initialized!");
+      console.error("Firestore not initialized!");
     }
   }, [navigate]);
 
@@ -88,28 +88,32 @@ export default function DoctorDashboard() {
       return;
     }
     
-    if (!database) {
+    if (!db) {
       toast({
         title: "Database Error",
-        description: "Firebase Realtime Database not initialized. Check your Firebase configuration.",
+        description: "Firestore not initialized. Check your Firebase configuration.",
         variant: "destructive",
       });
-      console.error("Firebase database is null");
+      console.error("Firestore is null");
       return;
     }
     
     const patientId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    const patient: Patient = {
-      id: patientId,
+    const patient = {
+      name: p.name,
+      age: p.age,
+      gender: p.gender,
+      phone: p.phone,
+      notes: p.notes,
       histories: [],
-      ...p,
-    } as Patient;
+      createdAt: new Date().toISOString()
+    };
     
-    console.log("Adding patient to Firebase:", patient, "Doctor ID:", currentDoctor.id);
+    console.log("Adding patient to Firestore:", patient, "Doctor ID:", currentDoctor.id);
     
     try {
-      await set(ref(database, `doctors/${currentDoctor.id}/patients/${patientId}`), patient);
-      console.log("Patient added successfully to Firebase");
+      await setDoc(doc(db, "doctors", currentDoctor.id, "patients", patientId), patient);
+      console.log("Patient added successfully to Firestore");
       // Stay on add patient page to see the updated table
     } catch (error) {
       console.error("Error adding patient:", error);
@@ -122,7 +126,7 @@ export default function DoctorDashboard() {
   };
 
   const addHistory = async (patientId: string, entry: Omit<HistoryEntry, "id">) => {
-    if (!currentDoctor || !database) return;
+    if (!currentDoctor || !db) return;
     
     const patient = patients.find(p => p.id === patientId);
     if (!patient) return;
@@ -132,7 +136,11 @@ export default function DoctorDashboard() {
     const updatedHistories = [...patient.histories, newHistory];
     
     try {
-      await set(ref(database, `doctors/${currentDoctor.id}/patients/${patientId}/histories`), updatedHistories);
+      await setDoc(doc(db, "doctors", currentDoctor.id, "patients", patientId), {
+        ...patient,
+        histories: updatedHistories
+      });
+      console.log("History added successfully to Firestore");
     } catch (error) {
       console.error("Error adding history:", error);
       toast({

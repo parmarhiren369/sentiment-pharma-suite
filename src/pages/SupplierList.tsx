@@ -369,7 +369,7 @@ const SupplierList = () => {
     <div className="min-h-screen bg-background">
       <AppHeader 
         title="Supplier Management" 
-        icon={Building2s}
+        icon={Users}
       />
       
       <div className="p-6 space-y-6">
@@ -445,7 +445,7 @@ const SupplierList = () => {
               </div>
             ) : filteredSuppliers.length === 0 ? (
               <div className="text-center py-12">
-                <Building2s className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No suppliers found</h3>
                 <p className="text-muted-foreground mb-4">
                   {searchTerm ? "Try adjusting your search criteria" : "Get started by adding your first supplier"}

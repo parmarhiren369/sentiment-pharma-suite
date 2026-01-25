@@ -1,68 +1,38 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  UserPlus, 
-  Users, 
-  FileText, 
-  LogOut,
-  Calendar,
-  Search,
-  Edit,
-  Eye,
-  Stethoscope
-} from "lucide-react";
+import { LogOut, Stethoscope } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { DataTable } from "@/components/tables/DataTable";
-import { StatCard } from "@/components/cards/StatCard";
-import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, query, where } from "firebase/firestore";
+
+type View = "dashboard" | "add" | "history";
+
+interface HistoryEntry {
+  id: string;
+  date: string;
+  note: string;
+  doctor?: string;
+  prescription?: string;
+}
 
 interface Patient {
   id: string;
   name: string;
-  age: number;
-  gender: string;
-  phone: string;
-  email: string;
-  bloodGroup?: string;
-  address: string;
-  medicalHistory: string;
-  currentMedication?: string;
-  allergies?: string;
-  lastVisit: string;
-  doctorId: string;
-  createdAt: string;
+  age?: number;
+  gender?: string;
+  phone?: string;
+  notes?: string;
+  histories: HistoryEntry[];
 }
+
+const STORAGE_KEY = "doctor_patients_v1";
 
 export default function DoctorDashboard() {
   const [currentDoctor, setCurrentDoctor] = useState<any>(null);
+  const [view, setView] = useState<View>("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [isViewPatientOpen, setIsViewPatientOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
-  const { toast } = useToast();
-
-  const [newPatient, setNewPatient] = useState({
-    name: "",
-    age: "",
-    gender: "Male",
-    phone: "",
-    email: "",
-    bloodGroup: "",
-    address: "",
-    medicalHistory: "",
-    currentMedication: "",
-    allergies: "",
-  });
 
   useEffect(() => {
     const doctorData = localStorage.getItem("currentDoctor");
@@ -72,174 +42,237 @@ export default function DoctorDashboard() {
     }
     const doctor = JSON.parse(doctorData);
     setCurrentDoctor(doctor);
-    loadPatients(doctor.id);
+    
+    // Load patients from localStorage
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try {
+        setPatients(JSON.parse(raw));
+      } catch {
+        setPatients([]);
+      }
+    }
   }, [navigate]);
 
-  const loadPatients = async (doctorId: string) => {
-    try {
-      if (!db) return;
-      const patientsRef = collection(db, "patients");
-      const q = query(
-        patientsRef, 
-        where("doctorId", "==", doctorId)
-      );
-      const querySnapshot = await getDocs(q);
-      const patientsData: Patient[] = [];
-      querySnapshot.forEach((doc) => {
-        patientsData.push({ id: doc.id, ...doc.data() } as Patient);
-      });
-      // Sort in memory instead of in query to avoid needing a composite index
-      patientsData.sort((a, b) => {
-        const dateA = new Date(a.createdAt).getTime();
-        const dateB = new Date(b.createdAt).getTime();
-        return dateB - dateA; // Descending order (newest first)
-      });
-      setPatients(patientsData);
-    } catch (error) {
-      console.error("Error loading patients:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load patients",
-        variant: "destructive",
-      });
-    }
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(patients));
+  }, [patients]);
+
+  const addPatient = (p: Omit<Patient, "id" | "histories">) => {
+    const patient: Patient = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      histories: [],
+      ...p,
+    } as Patient;
+    setPatients((s) => [patient, ...s]);
+    setView("history");
   };
 
-  const handleAddPatient = async () => {
-    if (!newPatient.name || !newPatient.age || !newPatient.phone) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      if (!db || !currentDoctor) {
-        throw new Error("System not ready");
-      }
-
-      const patientData = {
-        name: newPatient.name,
-        age: parseInt(newPatient.age),
-        gender: newPatient.gender,
-        phone: newPatient.phone,
-        email: newPatient.email,
-        bloodGroup: newPatient.bloodGroup,
-        address: newPatient.address,
-        medicalHistory: newPatient.medicalHistory,
-        currentMedication: newPatient.currentMedication,
-        allergies: newPatient.allergies,
-        lastVisit: new Date().toLocaleDateString(),
-        doctorId: currentDoctor.id,
-        doctorName: currentDoctor.name,
-        createdAt: new Date().toISOString(),
-      };
-
-      await addDoc(collection(db, "patients"), patientData);
-
-      toast({
-        title: "Patient Added Successfully",
-        description: `${newPatient.name} has been added to your patients`,
-      });
-
-      setIsAddPatientOpen(false);
-      setNewPatient({
-        name: "",
-        age: "",
-        gender: "Male",
-        phone: "",
-        email: "",
-        bloodGroup: "",
-        address: "",
-        medicalHistory: "",
-        currentMedication: "",
-        allergies: "",
-      });
-
-      loadPatients(currentDoctor.id);
-    } catch (error: any) {
-      console.error("Error adding patient:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add patient",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
+  const addHistory = (patientId: string, entry: Omit<HistoryEntry, "id">) => {
+    setPatients((s) =>
+      s.map((p) =>
+        p.id === patientId
+          ? { ...p, histories: [...p.histories, { id: `${Date.now()}-${Math.random().toString(36).slice(2,6)}`, ...entry }] }
+          : p
+      )
+    );
   };
 
   const handleLogout = () => {
     localStorage.removeItem("currentDoctor");
     navigate("/doctor-login");
-    toast({
-      title: "Logged Out",
-      description: "You have been successfully logged out",
-    });
   };
 
-  const filteredPatients = patients.filter(patient =>
-    patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.phone.includes(searchTerm) ||
-    patient.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const Dashboard = () => {
+    return (
+      <div className="p-6">
+        <h2 className="text-2xl font-semibold mb-2">Dashboard</h2>
+        <p className="text-sm text-muted-foreground mb-6">Overview of patients and activities</p>
 
-  const patientColumns = [
-    {
-      key: "name" as keyof Patient,
-      header: "Patient Name",
-      render: (item: Patient) => (
-        <div>
-          <p className="font-medium text-foreground">{item.name}</p>
-          <p className="text-xs text-muted-foreground">{item.age} years, {item.gender}</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-card p-4 rounded-lg border"> 
+            <h3 className="text-sm text-muted-foreground">Total Patients</h3>
+            <div className="text-2xl font-bold">{patients.length}</div>
+          </div>
+          <div className="bg-card p-4 rounded-lg border">
+            <h3 className="text-sm text-muted-foreground">Patients with History</h3>
+            <div className="text-2xl font-bold">{patients.filter(p => p.histories.length > 0).length}</div>
+          </div>
+          <div className="bg-card p-4 rounded-lg border">
+            <h3 className="text-sm text-muted-foreground">Total History Entries</h3>
+            <div className="text-2xl font-bold">{patients.flatMap(p => p.histories).length}</div>
+          </div>
         </div>
-      )
-    },
-    {
-      key: "phone" as keyof Patient,
-      header: "Contact",
-      render: (item: Patient) => (
-        <div className="space-y-1">
-          <p className="text-sm">{item.phone}</p>
-          {item.email && <p className="text-xs text-muted-foreground">{item.email}</p>}
+
+        <div className="bg-card p-4 rounded-lg border">
+          <h3 className="font-medium mb-3">Recent Patients</h3>
+          {patients.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No patients yet. Add one from the sidebar.</p>
+          ) : (
+            <ul className="space-y-3">
+              {patients.slice(0, 8).map((p) => (
+                <li key={p.id} className="flex items-center justify-between border-b pb-2">
+                  <div>
+                    <div className="font-medium">{p.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {p.age ? `${p.age} yrs` : "—"} • {p.phone || "—"}
+                    </div>
+                  </div>
+                  <div className="text-sm text-muted-foreground">{p.histories.length} entries</div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      )
-    },
-    {
-      key: "bloodGroup" as keyof Patient,
-      header: "Blood Group",
-      render: (item: Patient) => (
-        <span className="badge-type badge-raw">
-          {item.bloodGroup || "N/A"}
-        </span>
-      )
-    },
-    {
-      key: "lastVisit" as keyof Patient,
-      header: "Last Visit",
-    },
-    {
-      key: "id" as keyof Patient,
-      header: "Actions",
-      render: (item: Patient) => (
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setSelectedPatient(item);
-              setIsViewPatientOpen(true);
-            }}
-          >
-            <Eye className="w-4 h-4" />
-          </Button>
+      </div>
+    );
+  };
+
+  const AddPatient = () => {
+    const [name, setName] = useState("");
+    const [age, setAge] = useState("");
+    const [gender, setGender] = useState("");
+    const [phone, setPhone] = useState("");
+    const [notes, setNotes] = useState("");
+
+    const handleSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!name.trim()) return;
+      addPatient({ name: name.trim(), age: age ? Number(age) : undefined, gender, phone, notes });
+      setName(""); setAge(""); setGender(""); setPhone(""); setNotes("");
+    };
+
+    return (
+      <div className="p-6">
+        <h2 className="text-2xl font-semibold mb-2">Add Patient</h2>
+        <form onSubmit={handleSubmit} className="space-y-4 max-w-xl">
+          <div>
+            <Label htmlFor="pname">Full Name</Label>
+            <Input id="pname" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. John Doe" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="page">Age</Label>
+              <Input id="page" value={age} onChange={(e) => setAge(e.target.value)} placeholder="45" />
+            </div>
+            <div>
+              <Label htmlFor="pgender">Gender</Label>
+              <Input id="pgender" value={gender} onChange={(e) => setGender(e.target.value)} placeholder="Male / Female" />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="pphone">Phone</Label>
+            <Input id="pphone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 234 567 890" />
+          </div>
+          <div>
+            <Label htmlFor="pnotes">Notes</Label>
+            <Input id="pnotes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Allergies, conditions" />
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit">Add Patient</Button>
+            <Button type="button" variant="outline" onClick={() => { setName(""); setAge(""); setGender(""); setPhone(""); setNotes(""); }}>Reset</Button>
+          </div>
+        </form>
+      </div>
+    );
+  };
+
+  const PatientHistory = () => {
+    const [selectedPatientId, setSelectedPatientId] = useState<string | null>(patients[0]?.id ?? null);
+    const [note, setNote] = useState("");
+    const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+    const [doctor, setDoctor] = useState("");
+    const [prescription, setPrescription] = useState("");
+
+    useEffect(() => {
+      if (!selectedPatientId && patients.length) setSelectedPatientId(patients[0].id);
+    }, [patients, selectedPatientId]);
+
+    const handleAddHistory = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedPatientId || !note.trim()) return;
+      addHistory(selectedPatientId, { date, note: note.trim(), doctor: doctor.trim() || undefined, prescription: prescription.trim() || undefined });
+      setNote(""); setDoctor(""); setPrescription("");
+    };
+
+    const selPatient = patients.find(p => p.id === selectedPatientId) || null;
+
+    return (
+      <div className="p-6">
+        <h2 className="text-2xl font-semibold mb-2">Patient History</h2>
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="md:col-span-1 bg-card p-4 rounded border">
+            <h3 className="font-medium mb-2">Patients</h3>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {patients.length === 0 && <div className="text-sm text-muted-foreground">No patients added</div>}
+              {patients.map(p => (
+                <button key={p.id} onClick={() => setSelectedPatientId(p.id)} className={`w-full text-left p-2 rounded ${p.id === selectedPatientId ? "bg-primary/10" : "hover:bg-muted/40"}`}>
+                  <div className="font-medium">{p.name}</div>
+                  <div className="text-xs text-muted-foreground">{p.phone || "—"}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 space-y-4">
+            <div className="bg-card p-4 rounded border">
+              <h3 className="font-medium mb-3">Add History Entry</h3>
+              {!selPatient ? (
+                <p className="text-sm text-muted-foreground">Select a patient to add history</p>
+              ) : (
+                <form onSubmit={handleAddHistory} className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="hdate">Date</Label>
+                      <Input id="hdate" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label htmlFor="hdoctor">Doctor</Label>
+                      <Input id="hdoctor" value={doctor} onChange={(e) => setDoctor(e.target.value)} placeholder="Dr. Name" />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="hnote">Note</Label>
+                    <Input id="hnote" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Visit summary" />
+                  </div>
+                  <div>
+                    <Label htmlFor="hpres">Prescription</Label>
+                    <Input id="hpres" value={prescription} onChange={(e) => setPrescription(e.target.value)} placeholder="Medicines" />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="submit">Add History</Button>
+                    <Button type="button" variant="outline" onClick={() => { setNote(""); setDoctor(""); setPrescription(""); }}>Reset</Button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            <div className="bg-card p-4 rounded border">
+              <h3 className="font-medium mb-3">History for {selPatient?.name ?? "—"}</h3>
+              {!selPatient || selPatient.histories.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No history entries yet.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {selPatient.histories.map(h => (
+                    <li key={h.id} className="border rounded p-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="font-medium">{h.date}</div>
+                          <div className="text-sm mt-1">{h.note}</div>
+                          {h.doctor && <div className="text-xs text-muted-foreground mt-1">By: {h.doctor}</div>}
+                        </div>
+                        {h.prescription && <div className="text-sm text-primary">{h.prescription}</div>}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         </div>
-      )
-    },
-  ];
+      </div>
+    );
+  };
 
   if (!currentDoctor) {
     return (
@@ -250,297 +283,48 @@ export default function DoctorDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-card border-b border-border px-6 py-4">
-        <div className="flex items-center justify-between">
+    <div className="flex h-screen">
+      <div className={`transition-all duration-200 bg-surface border-r ${sidebarOpen ? "w-64" : "w-16"}`}>
+        <div className="p-3 flex items-center justify-between border-b">
+          <div className="font-bold">{sidebarOpen ? "Doctor Portal" : "DP"}</div>
+          <button onClick={() => setSidebarOpen(s => !s)} className="p-1 rounded hover:bg-muted/40">{sidebarOpen ? "‹" : "›"}</button>
+        </div>
+        <nav className="p-2 space-y-1">
+          <button onClick={() => setView("dashboard")} className={`w-full text-left p-2 rounded ${view === "dashboard" ? "bg-primary/10" : "hover:bg-muted/40"}`}>
+            {sidebarOpen ? "Dashboard" : "D"}
+          </button>
+          <button onClick={() => setView("add")} className={`w-full text-left p-2 rounded ${view === "add" ? "bg-primary/10" : "hover:bg-muted/40"}`}>
+            {sidebarOpen ? "Add Patient" : "A"}
+          </button>
+          <button onClick={() => setView("history")} className={`w-full text-left p-2 rounded ${view === "history" ? "bg-primary/10" : "hover:bg-muted/40"}`}>
+            {sidebarOpen ? "Patient History" : "H"}
+          </button>
+        </nav>
+      </div>
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="bg-card border-b px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
               <Stethoscope className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">Doctor Portal</h1>
-              <p className="text-sm text-muted-foreground">Dr. {currentDoctor.name} - {currentDoctor.specialization}</p>
+              <h1 className="text-lg font-bold">Dr. {currentDoctor.name}</h1>
+              <p className="text-xs text-muted-foreground">{currentDoctor.specialization || "Doctor"}</p>
             </div>
           </div>
-          <Button variant="outline" onClick={handleLogout} className="gap-2">
+          <Button variant="outline" onClick={handleLogout} size="sm" className="gap-2">
             <LogOut className="w-4 h-4" />
             Logout
           </Button>
         </div>
-      </div>
 
-      <div className="p-6">
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <StatCard
-            title="Total Patients"
-            value={patients.length}
-            icon={Users}
-            iconBgColor="bg-primary/20"
-            iconColor="text-primary"
-          />
-          <StatCard
-            title="Today's Visits"
-            value={patients.filter(p => p.lastVisit === new Date().toLocaleDateString()).length}
-            icon={Calendar}
-            iconBgColor="bg-success/20"
-            iconColor="text-success"
-          />
-          <StatCard
-            title="Medical Records"
-            value={patients.filter(p => p.medicalHistory).length}
-            icon={FileText}
-            iconBgColor="bg-info/20"
-            iconColor="text-info"
-          />
-          <StatCard
-            title="Active Cases"
-            value={patients.filter(p => p.currentMedication).length}
-            icon={Stethoscope}
-            iconBgColor="bg-warning/20"
-            iconColor="text-warning"
-          />
+        <div className="flex-1 overflow-auto">
+          {view === "dashboard" && <Dashboard />}
+          {view === "add" && <AddPatient />}
+          {view === "history" && <PatientHistory />}
         </div>
-
-        {/* Patients Section */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>My Patients</CardTitle>
-                <CardDescription>Manage your patient records and medical history</CardDescription>
-              </div>
-              <Dialog open={isAddPatientOpen} onOpenChange={setIsAddPatientOpen}>
-                <DialogTrigger asChild>
-                  <Button className="gap-2">
-                    <UserPlus className="w-4 h-4" />
-                    Add New Patient
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Add New Patient</DialogTitle>
-                    <DialogDescription>
-                      Enter patient details and medical history
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="patientName">Full Name *</Label>
-                        <Input
-                          id="patientName"
-                          placeholder="John Doe"
-                          value={newPatient.name}
-                          onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="age">Age *</Label>
-                        <Input
-                          id="age"
-                          type="number"
-                          placeholder="35"
-                          value={newPatient.age}
-                          onChange={(e) => setNewPatient({ ...newPatient, age: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="gender">Gender</Label>
-                        <select
-                          id="gender"
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          value={newPatient.gender}
-                          onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value })}
-                        >
-                          <option value="Male">Male</option>
-                          <option value="Female">Female</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="bloodGroup">Blood Group</Label>
-                        <Input
-                          id="bloodGroup"
-                          placeholder="O+"
-                          value={newPatient.bloodGroup}
-                          onChange={(e) => setNewPatient({ ...newPatient, bloodGroup: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Phone *</Label>
-                        <Input
-                          id="phone"
-                          placeholder="+1 234 567 8900"
-                          value={newPatient.phone}
-                          onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="patient@email.com"
-                        value={newPatient.email}
-                        onChange={(e) => setNewPatient({ ...newPatient, email: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="address">Address</Label>
-                      <Textarea
-                        id="address"
-                        placeholder="Full address"
-                        value={newPatient.address}
-                        onChange={(e) => setNewPatient({ ...newPatient, address: e.target.value })}
-                        rows={2}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="medicalHistory">Medical History</Label>
-                      <Textarea
-                        id="medicalHistory"
-                        placeholder="Previous conditions, surgeries, family history..."
-                        value={newPatient.medicalHistory}
-                        onChange={(e) => setNewPatient({ ...newPatient, medicalHistory: e.target.value })}
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="currentMedication">Current Medication</Label>
-                      <Textarea
-                        id="currentMedication"
-                        placeholder="List current medications..."
-                        value={newPatient.currentMedication}
-                        onChange={(e) => setNewPatient({ ...newPatient, currentMedication: e.target.value })}
-                        rows={2}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="allergies">Allergies</Label>
-                      <Textarea
-                        id="allergies"
-                        placeholder="List any known allergies..."
-                        value={newPatient.allergies}
-                        onChange={(e) => setNewPatient({ ...newPatient, allergies: e.target.value })}
-                        rows={2}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setIsAddPatientOpen(false)}
-                      disabled={isLoading}
-                    >
-                      Cancel
-                    </Button>
-                    <Button onClick={handleAddPatient} disabled={isLoading}>
-                      {isLoading ? "Adding..." : "Add Patient"}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                <Input
-                  placeholder="Search patients by name, phone, or email..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <DataTable
-              data={filteredPatients}
-              columns={patientColumns}
-              keyField="id"
-            />
-          </CardContent>
-        </Card>
       </div>
-
-      {/* View Patient Dialog */}
-      <Dialog open={isViewPatientOpen} onOpenChange={setIsViewPatientOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Patient Details</DialogTitle>
-            <DialogDescription>Complete medical record</DialogDescription>
-          </DialogHeader>
-          {selectedPatient && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-muted-foreground">Name</Label>
-                  <p className="font-medium">{selectedPatient.name}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Age / Gender</Label>
-                  <p className="font-medium">{selectedPatient.age} years, {selectedPatient.gender}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-muted-foreground">Phone</Label>
-                  <p className="font-medium">{selectedPatient.phone}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Blood Group</Label>
-                  <p className="font-medium">{selectedPatient.bloodGroup || "N/A"}</p>
-                </div>
-              </div>
-              {selectedPatient.email && (
-                <div>
-                  <Label className="text-muted-foreground">Email</Label>
-                  <p className="font-medium">{selectedPatient.email}</p>
-                </div>
-              )}
-              {selectedPatient.address && (
-                <div>
-                  <Label className="text-muted-foreground">Address</Label>
-                  <p className="font-medium">{selectedPatient.address}</p>
-                </div>
-              )}
-              <div className="border-t pt-4">
-                <Label className="text-muted-foreground">Medical History</Label>
-                <p className="mt-2 text-sm whitespace-pre-wrap">
-                  {selectedPatient.medicalHistory || "No medical history recorded"}
-                </p>
-              </div>
-              {selectedPatient.currentMedication && (
-                <div>
-                  <Label className="text-muted-foreground">Current Medication</Label>
-                  <p className="mt-2 text-sm whitespace-pre-wrap">{selectedPatient.currentMedication}</p>
-                </div>
-              )}
-              {selectedPatient.allergies && (
-                <div>
-                  <Label className="text-muted-foreground">Allergies</Label>
-                  <p className="mt-2 text-sm whitespace-pre-wrap">{selectedPatient.allergies}</p>
-                </div>
-              )}
-              <div>
-                <Label className="text-muted-foreground">Last Visit</Label>
-                <p className="font-medium">{selectedPatient.lastVisit}</p>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

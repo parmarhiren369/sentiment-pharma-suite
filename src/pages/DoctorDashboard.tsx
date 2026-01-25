@@ -4,6 +4,7 @@ import { LogOut, Stethoscope, LayoutDashboard, UserPlus, ClipboardList } from "l
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 
 type View = "dashboard" | "add" | "history";
 
@@ -33,6 +34,7 @@ export default function DoctorDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [patients, setPatients] = useState<Patient[]>([]);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     const doctorData = localStorage.getItem("currentDoctor");
@@ -137,8 +139,19 @@ export default function DoctorDashboard() {
 
     const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
-      if (!name.trim()) return;
+      if (!name.trim()) {
+        toast({
+          title: "Name Required",
+          description: "Please enter patient name",
+          variant: "destructive",
+        });
+        return;
+      }
       addPatient({ name: name.trim(), age: age ? Number(age) : undefined, gender, phone, notes });
+      toast({
+        title: "Patient Added",
+        description: `${name.trim()} has been added successfully`,
+      });
       setName(""); setAge(""); setGender(""); setPhone(""); setNotes("");
     };
 
@@ -190,8 +203,20 @@ export default function DoctorDashboard() {
 
     const handleAddHistory = (e: React.FormEvent) => {
       e.preventDefault();
-      if (!selectedPatientId || !note.trim()) return;
+      if (!selectedPatientId || !note.trim()) {
+        toast({
+          title: "Missing Information",
+          description: "Please select a patient and enter a note",
+          variant: "destructive",
+        });
+        return;
+      }
       addHistory(selectedPatientId, { date, note: note.trim(), doctor: doctor.trim() || undefined, prescription: prescription.trim() || undefined });
+      const patientName = patients.find(p => p.id === selectedPatientId)?.name || "Patient";
+      toast({
+        title: "History Added",
+        description: `New history entry added for ${patientName}`,
+      });
       setNote(""); setDoctor(""); setPrescription("");
     };
 
@@ -248,20 +273,24 @@ export default function DoctorDashboard() {
             </div>
 
             <div className="bg-card p-4 rounded border">
-              <h3 className="font-medium mb-3">History for {selPatient?.name ?? "—"}</h3>
+              <h3 className="font-medium mb-3">History for {selPatient?.name ?? "—"} ({selPatient?.histories.length || 0} entries)</h3>
               {!selPatient || selPatient.histories.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No history entries yet.</p>
+                <p className="text-sm text-muted-foreground">No history entries yet. Add one using the form above.</p>
               ) : (
-                <ul className="space-y-3">
-                  {selPatient.histories.map(h => (
-                    <li key={h.id} className="border rounded p-3">
+                <ul className="space-y-3 max-h-[500px] overflow-y-auto">
+                  {[...selPatient.histories].reverse().map(h => (
+                    <li key={h.id} className="border rounded p-3 hover:bg-muted/20 transition-colors">
                       <div className="flex justify-between items-start">
-                        <div>
-                          <div className="font-medium">{h.date}</div>
+                        <div className="flex-1">
+                          <div className="font-medium text-primary">{h.date}</div>
                           <div className="text-sm mt-1">{h.note}</div>
-                          {h.doctor && <div className="text-xs text-muted-foreground mt-1">By: {h.doctor}</div>}
+                          {h.doctor && <div className="text-xs text-muted-foreground mt-1">👨‍⚕️ By: {h.doctor}</div>}
                         </div>
-                        {h.prescription && <div className="text-sm text-primary">{h.prescription}</div>}
+                        {h.prescription && (
+                          <div className="ml-3 text-xs bg-primary/10 px-2 py-1 rounded">
+                            💊 {h.prescription}
+                          </div>
+                        )}
                       </div>
                     </li>
                   ))}

@@ -270,9 +270,9 @@ const CustomerList = () => {
 
   const columns = [
     {
+      key: "name",
       header: "Customer Name",
-      accessorKey: "name",
-      cell: (row: Customer) => (
+      render: (row: Customer) => (
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
             <User className="w-4 h-4 text-primary" />
@@ -285,9 +285,9 @@ const CustomerList = () => {
       )
     },
     {
+      key: "contact",
       header: "Contact",
-      accessorKey: "phone",
-      cell: (row: Customer) => (
+      render: (row: Customer) => (
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-sm">
             <Phone className="w-3 h-3 text-muted-foreground" />
@@ -303,9 +303,9 @@ const CustomerList = () => {
       )
     },
     {
+      key: "address",
       header: "Address",
-      accessorKey: "address",
-      cell: (row: Customer) => (
+      render: (row: Customer) => (
         <div className="flex items-start gap-2 max-w-xs">
           {row.address ? (
             <>
@@ -319,9 +319,9 @@ const CustomerList = () => {
       )
     },
     {
+      key: "opening",
       header: "Opening Balance",
-      accessorKey: "opening",
-      cell: (row: Customer) => (
+      render: (row: Customer) => (
         <div className="flex items-center gap-1">
           <DollarSign className="w-3 h-3 text-muted-foreground" />
           <span className="font-medium">
@@ -331,18 +331,18 @@ const CustomerList = () => {
       )
     },
     {
+      key: "status",
       header: "Status",
-      accessorKey: "id",
-      cell: (row: Customer) => (
+      render: (row: Customer) => (
         <Badge variant={row.phone && row.email ? "default" : "secondary"}>
           {row.phone && row.email ? "Active" : "Incomplete"}
         </Badge>
       )
     },
     {
+      key: "actions",
       header: "Actions",
-      accessorKey: "id",
-      cell: (row: Customer) => (
+      render: (row: Customer) => (
         <div className="flex gap-2">
           <Button
             variant="ghost"
@@ -459,8 +459,9 @@ const CustomerList = () => {
               </div>
             ) : (
               <DataTable
-                columns={columns}
                 data={filteredCustomers}
+                columns={columns}
+                keyField="id"
               />
             )}
           </div>

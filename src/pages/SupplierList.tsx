@@ -270,9 +270,9 @@ const SupplierList = () => {
 
   const columns = [
     {
+      key: "name",
       header: "Supplier Name",
-      accessorKey: "name",
-      cell: (row: Supplier) => (
+      render: (row: Supplier) => (
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
             <Building2 className="w-4 h-4 text-primary" />
@@ -285,9 +285,9 @@ const SupplierList = () => {
       )
     },
     {
+      key: "contact",
       header: "Contact",
-      accessorKey: "phone",
-      cell: (row: Supplier) => (
+      render: (row: Supplier) => (
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-sm">
             <Phone className="w-3 h-3 text-muted-foreground" />
@@ -303,9 +303,9 @@ const SupplierList = () => {
       )
     },
     {
+      key: "address",
       header: "Address",
-      accessorKey: "address",
-      cell: (row: Supplier) => (
+      render: (row: Supplier) => (
         <div className="flex items-start gap-2 max-w-xs">
           {row.address ? (
             <>
@@ -319,9 +319,9 @@ const SupplierList = () => {
       )
     },
     {
+      key: "opening",
       header: "Opening Balance",
-      accessorKey: "opening",
-      cell: (row: Supplier) => (
+      render: (row: Supplier) => (
         <div className="flex items-center gap-1">
           <DollarSign className="w-3 h-3 text-muted-foreground" />
           <span className="font-medium">
@@ -331,18 +331,18 @@ const SupplierList = () => {
       )
     },
     {
+      key: "status",
       header: "Status",
-      accessorKey: "id",
-      cell: (row: Supplier) => (
+      render: (row: Supplier) => (
         <Badge variant={row.phone && row.email ? "default" : "secondary"}>
           {row.phone && row.email ? "Active" : "Incomplete"}
         </Badge>
       )
     },
     {
+      key: "actions",
       header: "Actions",
-      accessorKey: "id",
-      cell: (row: Supplier) => (
+      render: (row: Supplier) => (
         <div className="flex gap-2">
           <Button
             variant="ghost"
@@ -459,8 +459,9 @@ const SupplierList = () => {
               </div>
             ) : (
               <DataTable
-                columns={columns}
                 data={filteredSuppliers}
+                columns={columns}
+                keyField="id"
               />
             )}
           </div>

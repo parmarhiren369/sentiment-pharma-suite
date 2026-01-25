@@ -51,10 +51,14 @@ export default function DoctorDashboard() {
       const unsubscribe = onValue(patientsRef, (snapshot) => {
         const data = snapshot.val();
         if (data) {
-          const patientsArray = Object.keys(data).map(key => ({
-            ...data[key],
-            id: key
-          }));
+          const patientsArray = Object.keys(data).map(key => {
+            const patientData = data[key];
+            return {
+              ...patientData,
+              id: key,
+              histories: patientData.histories || []
+            } as Patient;
+          });
           setPatients(patientsArray);
         } else {
           setPatients([]);
@@ -186,36 +190,82 @@ export default function DoctorDashboard() {
     };
 
     return (
-      <div className="p-6">
-        <h2 className="text-2xl font-semibold mb-2">Add Patient</h2>
-        <form onSubmit={handleSubmit} className="space-y-4 max-w-xl">
-          <div>
-            <Label htmlFor="pname">Full Name</Label>
-            <Input id="pname" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. John Doe" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
+      <div className="p-6 space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold mb-2">Add Patient</h2>
+          <form onSubmit={handleSubmit} className="space-y-4 max-w-xl bg-card p-4 rounded-lg border">
             <div>
-              <Label htmlFor="page">Age</Label>
-              <Input id="page" value={age} onChange={(e) => setAge(e.target.value)} placeholder="45" />
+              <Label htmlFor="pname">Full Name</Label>
+              <Input id="pname" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. John Doe" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="page">Age</Label>
+                <Input id="page" value={age} onChange={(e) => setAge(e.target.value)} placeholder="45" />
+              </div>
+              <div>
+                <Label htmlFor="pgender">Gender</Label>
+                <Input id="pgender" value={gender} onChange={(e) => setGender(e.target.value)} placeholder="Male / Female" />
+              </div>
             </div>
             <div>
-              <Label htmlFor="pgender">Gender</Label>
-              <Input id="pgender" value={gender} onChange={(e) => setGender(e.target.value)} placeholder="Male / Female" />
+              <Label htmlFor="pphone">Phone</Label>
+              <Input id="pphone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 234 567 890" />
             </div>
-          </div>
-          <div>
-            <Label htmlFor="pphone">Phone</Label>
-            <Input id="pphone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 234 567 890" />
-          </div>
-          <div>
-            <Label htmlFor="pnotes">Notes</Label>
-            <Input id="pnotes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Allergies, conditions" />
-          </div>
-          <div className="flex gap-2">
-            <Button type="submit">Add Patient</Button>
-            <Button type="button" variant="outline" onClick={() => { setName(""); setAge(""); setGender(""); setPhone(""); setNotes(""); }}>Reset</Button>
-          </div>
-        </form>
+            <div>
+              <Label htmlFor="pnotes">Notes</Label>
+              <Input id="pnotes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Allergies, conditions" />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit">Add Patient</Button>
+              <Button type="button" variant="outline" onClick={() => { setName(""); setAge(""); setGender(""); setPhone(""); setNotes(""); }}>Reset</Button>
+            </div>
+          </form>
+        </div>
+
+        <div>
+          <h3 className="text-xl font-semibold mb-3">Patient List ({patients.length})</h3>
+          {patients.length === 0 ? (
+            <div className="bg-card p-6 rounded-lg border text-center text-muted-foreground">
+              No patients added yet. Add your first patient using the form above.
+            </div>
+          ) : (
+            <div className="bg-card rounded-lg border overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-muted/50 border-b">
+                    <tr>
+                      <th className="text-left p-3 font-medium">#</th>
+                      <th className="text-left p-3 font-medium">Name</th>
+                      <th className="text-left p-3 font-medium">Age</th>
+                      <th className="text-left p-3 font-medium">Gender</th>
+                      <th className="text-left p-3 font-medium">Phone</th>
+                      <th className="text-left p-3 font-medium">Notes</th>
+                      <th className="text-left p-3 font-medium">Histories</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {patients.map((patient, index) => (
+                      <tr key={patient.id} className="border-b hover:bg-muted/20 transition-colors">
+                        <td className="p-3 text-muted-foreground">{index + 1}</td>
+                        <td className="p-3 font-medium">{patient.name}</td>
+                        <td className="p-3">{patient.age || "—"}</td>
+                        <td className="p-3">{patient.gender || "—"}</td>
+                        <td className="p-3">{patient.phone || "—"}</td>
+                        <td className="p-3 text-sm text-muted-foreground max-w-xs truncate">{patient.notes || "—"}</td>
+                        <td className="p-3">
+                          <span className="bg-primary/10 text-primary px-2 py-1 rounded text-sm">
+                            {patient.histories?.length || 0}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
   };

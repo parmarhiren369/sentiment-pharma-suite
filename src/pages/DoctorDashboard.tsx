@@ -81,7 +81,7 @@ export default function DoctorDashboard() {
     
     try {
       await set(ref(database, `doctors/${currentDoctor.id}/patients/${patientId}`), patient);
-      setView("history");
+      // Stay on add patient page to see the updated table
     } catch (error) {
       console.error("Error adding patient:", error);
       toast({

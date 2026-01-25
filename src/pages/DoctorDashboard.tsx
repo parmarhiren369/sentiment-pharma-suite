@@ -45,11 +45,16 @@ export default function DoctorDashboard() {
     const doctor = JSON.parse(doctorData);
     setCurrentDoctor(doctor);
     
+    console.log("Doctor logged in:", doctor);
+    console.log("Firebase database initialized:", !!database);
+    
     // Load patients from Firebase Realtime Database
     if (database) {
       const patientsRef = ref(database, `doctors/${doctor.id}/patients`);
+      console.log("Setting up Firebase listener for path:", `doctors/${doctor.id}/patients`);
       const unsubscribe = onValue(patientsRef, (snapshot) => {
         const data = snapshot.val();
+        console.log("Firebase data received:", data);
         if (data) {
           const patientsArray = Object.keys(data).map(key => {
             const patientData = data[key];
@@ -59,18 +64,39 @@ export default function DoctorDashboard() {
               histories: patientData.histories || []
             } as Patient;
           });
+          console.log("Patients loaded:", patientsArray);
           setPatients(patientsArray);
         } else {
+          console.log("No patients found in Firebase");
           setPatients([]);
         }
       });
       
       return () => unsubscribe();
+    } else {
+      console.error("Firebase database not initialized!");
     }
   }, [navigate]);
 
   const addPatient = async (p: Omit<Patient, "id" | "histories">) => {
-    if (!currentDoctor || !database) return;
+    if (!currentDoctor) {
+      toast({
+        title: "Error",
+        description: "No doctor logged in",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!database) {
+      toast({
+        title: "Database Error",
+        description: "Firebase Realtime Database not initialized. Check your Firebase configuration.",
+        variant: "destructive",
+      });
+      console.error("Firebase database is null");
+      return;
+    }
     
     const patientId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const patient: Patient = {
@@ -79,14 +105,17 @@ export default function DoctorDashboard() {
       ...p,
     } as Patient;
     
+    console.log("Adding patient to Firebase:", patient, "Doctor ID:", currentDoctor.id);
+    
     try {
       await set(ref(database, `doctors/${currentDoctor.id}/patients/${patientId}`), patient);
+      console.log("Patient added successfully to Firebase");
       // Stay on add patient page to see the updated table
     } catch (error) {
       console.error("Error adding patient:", error);
       toast({
         title: "Error",
-        description: "Failed to add patient",
+        description: `Failed to add patient: ${error.message}`,
         variant: "destructive",
       });
     }

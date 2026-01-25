@@ -378,7 +378,7 @@ const SupplierList = () => {
           <StatCard
             title="Total Suppliers"
             value={stats.totalSuppliers.toString()}
-            icon={Building2s}
+            icon={Users}
             trend={{ value: stats.newThisMonth, label: "new this month" }}
             description="Active supplier accounts"
           />

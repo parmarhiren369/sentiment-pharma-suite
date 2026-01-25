@@ -11,6 +11,8 @@ import ProcessedInventory from "./pages/ProcessedInventory";
 import Accounting from "./pages/Accounting";
 import Doctors from "./pages/Doctors";
 import LossCalculation from "./pages/LossCalculation";
+import SupplierList from "./pages/SupplierList";
+import CustomerList from "./pages/CustomerList";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import Processing from "./pages/Processing";
@@ -60,6 +62,8 @@ const App = () => {
                   <Route path="/accounting" element={<Accounting />} />
                   <Route path="/doctors" element={<Doctors />} />
                   <Route path="/loss-calculation" element={<LossCalculation />} />
+                  <Route path="/suppliers" element={<SupplierList />} />
+                  <Route path="/customers" element={<CustomerList />} />
                   <Route path="/settings" element={<Settings />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />

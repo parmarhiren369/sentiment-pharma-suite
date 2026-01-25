@@ -9,7 +9,9 @@ import {
   LayoutDashboard,
   Boxes,
   Calculator,
-  LogIn
+  LogIn,
+  Users,
+  UserCheck
 } from "lucide-react";
 
 const mainMenuItems = [
@@ -20,6 +22,8 @@ const mainMenuItems = [
   { title: "Accounting", url: "/accounting", icon: Receipt },
   { title: "Doctors", url: "/doctors", icon: Stethoscope },
   { title: "Loss Calculation", url: "/loss-calculation", icon: Calculator },
+  { title: "Supplier List", url: "/suppliers", icon: Users },
+  { title: "Customer List", url: "/customers", icon: UserCheck },
 ];
 
 const systemMenuItems = [

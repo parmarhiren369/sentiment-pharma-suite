@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Stethoscope } from "lucide-react";
+import { LogOut, Stethoscope, LayoutDashboard, UserPlus, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -290,14 +290,17 @@ export default function DoctorDashboard() {
           <button onClick={() => setSidebarOpen(s => !s)} className="p-1 rounded hover:bg-muted/40">{sidebarOpen ? "‹" : "›"}</button>
         </div>
         <nav className="p-2 space-y-1">
-          <button onClick={() => setView("dashboard")} className={`w-full text-left p-2 rounded ${view === "dashboard" ? "bg-primary/10" : "hover:bg-muted/40"}`}>
-            {sidebarOpen ? "Dashboard" : "D"}
+          <button onClick={() => setView("dashboard")} className={`w-full text-left p-2 rounded flex items-center gap-2 ${view === "dashboard" ? "bg-primary/10 text-primary" : "hover:bg-muted/40"}`}>
+            <LayoutDashboard className="w-4 h-4" />
+            {sidebarOpen && <span>Dashboard</span>}
           </button>
-          <button onClick={() => setView("add")} className={`w-full text-left p-2 rounded ${view === "add" ? "bg-primary/10" : "hover:bg-muted/40"}`}>
-            {sidebarOpen ? "Add Patient" : "A"}
+          <button onClick={() => setView("add")} className={`w-full text-left p-2 rounded flex items-center gap-2 ${view === "add" ? "bg-primary/10 text-primary" : "hover:bg-muted/40"}`}>
+            <UserPlus className="w-4 h-4" />
+            {sidebarOpen && <span>Add Patient</span>}
           </button>
-          <button onClick={() => setView("history")} className={`w-full text-left p-2 rounded ${view === "history" ? "bg-primary/10" : "hover:bg-muted/40"}`}>
-            {sidebarOpen ? "Patient History" : "H"}
+          <button onClick={() => setView("history")} className={`w-full text-left p-2 rounded flex items-center gap-2 ${view === "history" ? "bg-primary/10 text-primary" : "hover:bg-muted/40"}`}>
+            <ClipboardList className="w-4 h-4" />
+            {sidebarOpen && <span>Patient History</span>}
           </button>
         </nav>
       </div>

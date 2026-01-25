@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { database } from "@/lib/firebase";
+import { ref, set, get, onValue } from "firebase/database";
 
 type View = "dashboard" | "add" | "history";
 
@@ -26,8 +28,6 @@ interface Patient {
   histories: HistoryEntry[];
 }
 
-const STORAGE_KEY = "doctor_patients_v1";
-
 export default function DoctorDashboard() {
   const [currentDoctor, setCurrentDoctor] = useState<any>(null);
   const [view, setView] = useState<View>("dashboard");
@@ -45,39 +45,69 @@ export default function DoctorDashboard() {
     const doctor = JSON.parse(doctorData);
     setCurrentDoctor(doctor);
     
-    // Load patients from localStorage
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      try {
-        setPatients(JSON.parse(raw));
-      } catch {
-        setPatients([]);
-      }
+    // Load patients from Firebase Realtime Database
+    if (database) {
+      const patientsRef = ref(database, `doctors/${doctor.id}/patients`);
+      const unsubscribe = onValue(patientsRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const patientsArray = Object.keys(data).map(key => ({
+            ...data[key],
+            id: key
+          }));
+          setPatients(patientsArray);
+        } else {
+          setPatients([]);
+        }
+      });
+      
+      return () => unsubscribe();
     }
   }, [navigate]);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(patients));
-  }, [patients]);
-
-  const addPatient = (p: Omit<Patient, "id" | "histories">) => {
+  const addPatient = async (p: Omit<Patient, "id" | "histories">) => {
+    if (!currentDoctor || !database) return;
+    
+    const patientId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const patient: Patient = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      id: patientId,
       histories: [],
       ...p,
     } as Patient;
-    setPatients((s) => [patient, ...s]);
-    setView("history");
+    
+    try {
+      await set(ref(database, `doctors/${currentDoctor.id}/patients/${patientId}`), patient);
+      setView("history");
+    } catch (error) {
+      console.error("Error adding patient:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add patient",
+        variant: "destructive",
+      });
+    }
   };
 
-  const addHistory = (patientId: string, entry: Omit<HistoryEntry, "id">) => {
-    setPatients((s) =>
-      s.map((p) =>
-        p.id === patientId
-          ? { ...p, histories: [...p.histories, { id: `${Date.now()}-${Math.random().toString(36).slice(2,6)}`, ...entry }] }
-          : p
-      )
-    );
+  const addHistory = async (patientId: string, entry: Omit<HistoryEntry, "id">) => {
+    if (!currentDoctor || !database) return;
+    
+    const patient = patients.find(p => p.id === patientId);
+    if (!patient) return;
+    
+    const historyId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newHistory = { id: historyId, ...entry };
+    const updatedHistories = [...patient.histories, newHistory];
+    
+    try {
+      await set(ref(database, `doctors/${currentDoctor.id}/patients/${patientId}/histories`), updatedHistories);
+    } catch (error) {
+      console.error("Error adding history:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add history entry",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleLogout = () => {

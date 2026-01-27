@@ -19,6 +19,7 @@ import Processing from "./pages/Processing";
 import DoctorLogin from "./pages/DoctorLogin";
 import DoctorDashboard from "./pages/DoctorDashboard";
 import Items from "./pages/Items";
+import Purchases from "./pages/Purchases";
 import { Suspense } from "react";
 
 console.log("App.tsx loaded");
@@ -58,6 +59,7 @@ const App = () => {
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Index />} />
                   <Route path="/items" element={<Items />} />
+                  <Route path="/purchases" element={<Purchases />} />
                   <Route path="/raw-inventory" element={<RawInventory />} />
                   <Route path="/processed-inventory" element={<ProcessedInventory />} />
                   <Route path="/processing" element={<Processing />} />

@@ -12,12 +12,14 @@ import {
   LogIn,
   Users,
   UserCheck,
-  ClipboardList
+  ClipboardList,
+  ShoppingCart
 } from "lucide-react";
 
 const mainMenuItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Items", url: "/items", icon: ClipboardList },
+  { title: "Purchases", url: "/purchases", icon: ShoppingCart },
   { title: "Processing", url: "/processing", icon: FlaskConical },
   { title: "Raw Inventory", url: "/raw-inventory", icon: Package },
   { title: "Processed Inventory", url: "/processed-inventory", icon: Boxes },

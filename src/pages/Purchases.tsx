@@ -107,23 +107,6 @@ export default function Purchases() {
     return taxInvoicePrice > 0 ? taxInvoicePrice : invoicePrice;
   }, [formData.invoicePrice, formData.notTaxInvoice, formData.taxInvoicePrice]);
 
-  const hasInvoicePrice = safeNumber(formData.invoicePrice) > 0;
-  const hasTaxInvoicePrice = safeNumber(formData.taxInvoicePrice) > 0;
-
-  // Keep the "Not a tax invoice" flag in sync with the price fields.
-  // - If Tax Invoice Price is entered, force tax mode.
-  // - If Invoice Price is entered and no Tax Invoice Price exists, force non-tax mode.
-  useEffect(() => {
-    if (hasTaxInvoicePrice && formData.notTaxInvoice) {
-      setFormData((prev) => ({ ...prev, notTaxInvoice: false }));
-      return;
-    }
-
-    if (!hasTaxInvoicePrice && hasInvoicePrice && !formData.notTaxInvoice) {
-      setFormData((prev) => ({ ...prev, notTaxInvoice: true }));
-    }
-  }, [formData.notTaxInvoice, hasInvoicePrice, hasTaxInvoicePrice]);
-
   const filteredPurchases = useMemo(() => {
     if (!search.trim()) return purchases;
     const q = search.toLowerCase();
@@ -638,20 +621,8 @@ export default function Purchases() {
                     min="0"
                     step="0.01"
                     value={formData.invoicePrice}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setFormData((prev) => {
-                        const tax = safeNumber(prev.taxInvoicePrice);
-                        const invoice = safeNumber(value);
-                        return {
-                          ...prev,
-                          invoicePrice: value,
-                          notTaxInvoice: tax <= 0 && invoice > 0 ? true : prev.notTaxInvoice,
-                        };
-                      });
-                    }}
+                    onChange={(e) => setFormData({ ...formData, invoicePrice: e.target.value })}
                     placeholder="0.00"
-                    disabled={hasTaxInvoicePrice}
                   />
                 </div>
 
@@ -696,7 +667,7 @@ export default function Purchases() {
                 <div className="flex-1">
                   <Label htmlFor="notTaxInvoice">Not a tax invoice</Label>
                   <p className="text-xs text-muted-foreground">
-                    If Tax Invoice Price is filled, Total Price uses it; otherwise Invoice Price.
+                    If enabled, Total Price uses Invoice Price; otherwise it uses Tax Invoice Price (or Invoice Price if tax price is empty).
                   </p>
                 </div>
               </div>

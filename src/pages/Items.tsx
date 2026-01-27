@@ -11,8 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { addDoc, collection, getDocs, orderBy, query, Timestamp } from "firebase/firestore";
-import { ClipboardList, Hash, IndianRupee, PackagePlus, Plus, RefreshCw } from "lucide-react";
+import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, Timestamp, updateDoc } from "firebase/firestore";
+import { ClipboardList, Hash, IndianRupee, PackagePlus, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 interface ItemRecord {
   id: string;
@@ -36,6 +36,7 @@ export default function Items() {
   const [items, setItems] = useState<ItemRecord[]>([]);
   const [search, setSearch] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<ItemRecord | null>(null);
   const [formData, setFormData] = useState(defaultFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -109,6 +110,51 @@ export default function Items() {
 
   const resetForm = () => {
     setFormData(defaultFormState);
+    setEditingItem(null);
+  };
+
+  const handleAddItem = () => {
+    setEditingItem(null);
+    setFormData(defaultFormState);
+    setIsDialogOpen(true);
+  };
+
+  const handleEditItem = (item: ItemRecord) => {
+    setEditingItem(item);
+    setFormData({
+      code: item.code,
+      name: item.name,
+      openingBalance: (item.openingBalance ?? 0).toString(),
+      unit: item.unit || "pcs",
+      notes: item.notes || "",
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    if (!db) {
+      toast({
+        title: "Database unavailable",
+        description: "Firebase is not initialized. Please check your environment variables.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!confirm("Are you sure you want to delete this item?")) return;
+
+    try {
+      await deleteDoc(doc(db, "items", itemId));
+      toast({ title: "Item deleted", description: "The item has been removed." });
+      fetchItems();
+    } catch (error) {
+      console.error("Error deleting item", error);
+      toast({
+        title: "Delete failed",
+        description: "Could not delete the item. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -153,20 +199,25 @@ export default function Items() {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "items"), {
+      const payload = {
         code: formData.code.trim().toUpperCase(),
         name: formData.name.trim(),
         openingBalance: openingValue,
         unit: formData.unit.trim() || "pcs",
         notes: formData.notes.trim(),
-        createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
-      });
+      };
 
-      toast({
-        title: "Item added",
-        description: "The item has been saved to Firestore.",
-      });
+      if (editingItem) {
+        await updateDoc(doc(db, "items", editingItem.id), payload);
+        toast({ title: "Item updated", description: "The item has been updated." });
+      } else {
+        await addDoc(collection(db, "items"), {
+          ...payload,
+          createdAt: Timestamp.now(),
+        });
+        toast({ title: "Item added", description: "The item has been saved to Firestore." });
+      }
 
       setIsDialogOpen(false);
       resetForm();
@@ -232,6 +283,30 @@ export default function Items() {
         </span>
       ),
     },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (item: ItemRecord) => (
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleEditItem(item)}
+            className="hover:bg-primary/10 hover:text-primary"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleDeleteItem(item.id)}
+            className="hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -284,7 +359,7 @@ export default function Items() {
                 Refresh
               </Button>
             </div>
-            <Button onClick={() => setIsDialogOpen(true)}>
+            <Button onClick={handleAddItem}>
               <Plus className="h-4 w-4 mr-2" />
               Add Item
             </Button>
@@ -300,11 +375,17 @@ export default function Items() {
         </Card>
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog
+        open={isDialogOpen}
+        onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) resetForm();
+        }}
+      >
         <DialogContent className="sm:max-w-lg">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
-              <DialogTitle>Add New Item</DialogTitle>
+              <DialogTitle>{editingItem ? "Edit Item" : "Add New Item"}</DialogTitle>
             </DialogHeader>
 
             <div className="space-y-4 py-2">
@@ -372,7 +453,7 @@ export default function Items() {
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : "Save Item"}
+                {isSubmitting ? "Saving..." : editingItem ? "Update Item" : "Save Item"}
               </Button>
             </DialogFooter>
           </form>

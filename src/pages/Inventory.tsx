@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
+import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { 
   Package, 
   Boxes, 
@@ -46,6 +47,30 @@ const finishedGoods: FinishedGoods[] = [];
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState<TabType>("raw");
+
+  const exportRows = useMemo(() => {
+    switch (activeTab) {
+      case "processed":
+        return processedInventory;
+      case "finished":
+        return finishedGoods;
+      case "raw":
+      default:
+        return rawInventory;
+    }
+  }, [activeTab]);
+
+  const exportFileName = useMemo(() => {
+    switch (activeTab) {
+      case "processed":
+        return "inventory-processed";
+      case "finished":
+        return "inventory-finished";
+      case "raw":
+      default:
+        return "inventory-raw";
+    }
+  }, [activeTab]);
 
   const inventoryColumns = [
     { key: "name" as keyof InventoryItem, header: "Material Name" },
@@ -184,10 +209,13 @@ export default function Inventory() {
                 <Filter className="w-4 h-4" />
                 Filter
               </Button>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Download className="w-4 h-4" />
-                Export
-              </Button>
+              <ExportExcelButton
+                rows={exportRows as unknown as Array<Record<string, unknown>>}
+                fileName={exportFileName}
+                sheetName="Inventory"
+                label="Export to Excel"
+                variant="outline"
+              />
             </div>
           </div>
 

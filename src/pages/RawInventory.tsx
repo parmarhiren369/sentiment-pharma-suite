@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
+import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { 
   Package, 
   AlertTriangle,
@@ -109,6 +110,18 @@ export default function RawInventory() {
     
     return matchesSearch && matchesDateRange;
   });
+
+  const exportRows = filteredData.map((item) => ({
+    Name: item.name,
+    Category: item.category,
+    Quantity: item.quantity,
+    Unit: item.unit,
+    Location: item.location,
+    "Reorder Level": item.reorderLevel,
+    Status: item.status,
+    Supplier: item.supplier,
+    "Last Updated": item.lastUpdated,
+  }));
 
   const handleAddItem = async () => {
     if (!formData.name || !formData.category || !formData.quantity || !formData.location || !formData.supplier) {
@@ -270,10 +283,13 @@ export default function RawInventory() {
               <p className="section-subtitle">Complete overview of raw material stock levels</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="gap-2">
-                <Download className="w-4 h-4" />
-                Export
-              </Button>
+              <ExportExcelButton
+                rows={exportRows}
+                fileName="raw-inventory"
+                sheetName="Raw Inventory"
+                label="Export to Excel"
+                variant="outline"
+              />
               <Button 
                 size="sm" 
                 onClick={() => setIsAddItemOpen(true)}

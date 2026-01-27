@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
+import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { 
   Boxes, 
   TrendingUp,
@@ -112,6 +113,19 @@ export default function ProcessedInventory() {
     
     return matchesSearch && matchesDateRange;
   });
+
+  const exportRows = filteredData.map((item) => ({
+    Name: item.name,
+    Category: item.category,
+    Quantity: item.quantity,
+    Unit: item.unit,
+    Location: item.location,
+    "Reorder Level": item.reorderLevel,
+    Status: item.status,
+    "Batch No": item.batchNo,
+    "Processed Date": item.processedDate,
+    "Last Updated": item.lastUpdated,
+  }));
 
   const handleAddItem = async () => {
     if (!formData.name || !formData.category || !formData.quantity || !formData.location || !formData.batchNo || !formData.processedDate) {
@@ -277,10 +291,13 @@ export default function ProcessedInventory() {
                 <Plus className="w-4 h-4" />
                 Add Item
               </Button>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Download className="w-4 h-4" />
-                Export
-              </Button>
+              <ExportExcelButton
+                rows={exportRows}
+                fileName="processed-inventory"
+                sheetName="Processed Inventory"
+                label="Export to Excel"
+                variant="outline"
+              />
             </div>
           </div>
 

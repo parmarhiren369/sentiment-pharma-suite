@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
+import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { 
   DollarSign, 
   TrendingUp, 
@@ -121,6 +122,34 @@ export default function Accounting() {
   const incomeTransactions = transactions.filter(t => t.type === "Income");
   const expenseTransactions = transactions.filter(t => t.type === "Expense");
 
+  const exportRows = useMemo(() => {
+    switch (activeTab) {
+      case "income":
+        return incomeTransactions;
+      case "expenses":
+        return expenseTransactions;
+      case "invoices":
+        return invoices;
+      case "overview":
+      default:
+        return transactions;
+    }
+  }, [activeTab, incomeTransactions, expenseTransactions]);
+
+  const exportFileName = useMemo(() => {
+    switch (activeTab) {
+      case "income":
+        return "accounting-income";
+      case "expenses":
+        return "accounting-expenses";
+      case "invoices":
+        return "accounting-invoices";
+      case "overview":
+      default:
+        return "accounting-transactions";
+    }
+  }, [activeTab]);
+
   return (
     <>
       <AppHeader title="Accounting" subtitle="Financial overview and transaction management" />
@@ -192,10 +221,13 @@ export default function Accounting() {
                 <Filter className="w-4 h-4" />
                 Filter
               </Button>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Download className="w-4 h-4" />
-                Export
-              </Button>
+              <ExportExcelButton
+                rows={exportRows as unknown as Array<Record<string, unknown>>}
+                fileName={exportFileName}
+                sheetName="Accounting"
+                label="Export to Excel"
+                variant="outline"
+              />
             </div>
           </div>
 

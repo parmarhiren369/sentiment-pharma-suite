@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { DataTable } from "@/components/tables/DataTable";
+import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { 
   Calculator, 
   TrendingDown,
@@ -163,6 +164,20 @@ export default function LossCalculation() {
       setFilteredData(lossData);
     }
   }, [searchQuery, lossData]);
+
+  const exportRows = filteredData.map((item) => ({
+    "Batch No": item.batchNo,
+    "Manual Batch No": item.manualBatchNo || "",
+    "Raw Material": item.rawMaterialName,
+    "Raw Used": item.rawMaterialUsed,
+    Unit: item.unit,
+    Product: item.productName,
+    "Product Qty": item.productQuantity,
+    Loss: item.lossQuantity,
+    "Loss %": item.lossPercentage,
+    Status: item.status,
+    Date: item.date,
+  }));
 
   const handleViewDetails = (item: LossCalculationData) => {
     setSelectedLoss(item);
@@ -340,10 +355,13 @@ export default function LossCalculation() {
               <p className="section-subtitle">Detailed analysis of raw material usage and loss</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="gap-2">
-                <Download className="w-4 h-4" />
-                Export
-              </Button>
+              <ExportExcelButton
+                rows={exportRows}
+                fileName="loss-calculation"
+                sheetName="Loss Calculation"
+                label="Export to Excel"
+                variant="outline"
+              />
             </div>
           </div>
 

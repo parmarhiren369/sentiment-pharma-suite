@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
+import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -126,6 +127,24 @@ export default function Purchases() {
       uniqueSuppliers: new Set(purchases.map((p) => p.supplierId)).size,
     };
   }, [purchases]);
+
+  const exportRows = useMemo(
+    () =>
+      filteredPurchases.map((p) => ({
+        Date: p.date,
+        "Invoice No": p.invoiceNo,
+        Supplier: p.supplierName,
+        "Item Code": p.itemCode,
+        "Item Name": p.itemName,
+        Quantity: p.quantity,
+        Unit: p.unit,
+        "Invoice Price": p.invoicePrice,
+        "Tax Invoice Price": p.taxInvoicePrice,
+        "Not Tax Invoice": p.notTaxInvoice ? "Yes" : "No",
+        "Total Price": p.totalPrice,
+      })),
+    [filteredPurchases]
+  );
 
   const fetchSuppliers = async () => {
     const snapshot = await getDocs(collection(db, "suppliers"));
@@ -477,6 +496,13 @@ export default function Purchases() {
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
               </Button>
+              <ExportExcelButton
+                rows={exportRows}
+                fileName="purchases"
+                sheetName="Purchases"
+                label="Export to Excel"
+                variant="outline"
+              />
             </div>
             <Button onClick={() => setIsDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />

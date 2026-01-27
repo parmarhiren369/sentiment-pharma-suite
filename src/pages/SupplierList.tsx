@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { DataTable } from "@/components/tables/DataTable";
 import { StatCard } from "@/components/cards/StatCard";
+import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { 
   Users, 
   Plus,
@@ -414,10 +415,27 @@ const SupplierList = () => {
                 className="pl-10"
               />
             </div>
-            <Button onClick={handleAddSupplier} className="w-full md:w-auto">
-              <Plus className="mr-2 h-4 w-4" />
-              Add New Supplier
-            </Button>
+            <div className="flex w-full md:w-auto gap-2">
+              <ExportExcelButton
+                rows={filteredSuppliers.map((s) => ({
+                  Name: s.name,
+                  Phone: s.phone,
+                  Email: s.email,
+                  GST: s.gst,
+                  Address: s.address,
+                  Opening: s.opening,
+                  Created: s.createdAt ? new Date(s.createdAt).toISOString().slice(0, 10) : "",
+                }))}
+                fileName="suppliers"
+                sheetName="Suppliers"
+                label="Export to Excel"
+                variant="outline"
+              />
+              <Button onClick={handleAddSupplier} className="w-full md:w-auto">
+                <Plus className="mr-2 h-4 w-4" />
+                Add New Supplier
+              </Button>
+            </div>
           </div>
         </Card>
 

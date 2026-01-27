@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
+import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { 
   FlaskConical, 
   Package, 
@@ -98,6 +99,15 @@ export default function Processing() {
   const [itemNameSuggestions, setItemNameSuggestions] = useState<string[]>([]);
   const [processedInventoryNames, setProcessedInventoryNames] = useState<string[]>([]);
   const { toast } = useToast();
+
+  const exportRows = batches.map((b) => ({
+    "Batch No": b.batchNo,
+    "Manual Batch No": b.manualBatchNo ?? "",
+    Status: b.status,
+    "Created At": b.createdAt ? new Date(b.createdAt).toLocaleString() : "",
+    "Items Count": b.items?.length ?? 0,
+    "Total Input Qty": (b.items ?? []).reduce((sum, item) => sum + (Number(item.useQuantity) || 0), 0),
+  }));
 
   const fetchRawInventory = async () => {
     if (!db) {
@@ -785,10 +795,19 @@ export default function Processing() {
               <h2 className="section-title">Created Batches</h2>
               <p className="section-subtitle">View all batches created from raw materials</p>
             </div>
-            <Button onClick={() => setIsAddRecipeOpen(true)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              Add Recipe
-            </Button>
+            <div className="flex items-center gap-2">
+              <ExportExcelButton
+                rows={exportRows}
+                fileName="processing-batches"
+                sheetName="Batches"
+                label="Export to Excel"
+                variant="outline"
+              />
+              <Button onClick={() => setIsAddRecipeOpen(true)} className="gap-2">
+                <Plus className="w-4 h-4" />
+                Add Recipe
+              </Button>
+            </div>
           </div>
           <div className="p-6">
             {batches.length > 0 ? (

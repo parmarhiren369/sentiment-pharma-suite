@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
+import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { 
   Stethoscope, 
   Users, 
@@ -266,6 +267,29 @@ export default function Doctors() {
 
   const activeDoctors = doctors.filter(d => d.status === "Active");
 
+  const exportRows = activeTab === "meetings"
+    ? meetings.map((m) => ({
+        "Doctor Name": m.doctorName,
+        Purpose: m.purpose,
+        Date: m.date,
+        Time: m.time,
+        Location: m.location,
+        Status: m.status,
+        Representative: m.representative,
+      }))
+    : (activeTab === "active" ? activeDoctors : doctors).map((d) => ({
+        Name: d.name,
+        Specialization: d.specialization,
+        Hospital: d.hospital,
+        City: d.city,
+        Phone: d.phone,
+        Email: d.email,
+        Status: d.status,
+        "Last Visit": d.lastVisit,
+        Prescriptions: d.prescriptions,
+        "Login ID": d.loginId || "",
+      }));
+
   return (
     <>
       <AppHeader title="Doctors Module" subtitle="Manage doctor relationships and meetings" />
@@ -336,6 +360,13 @@ export default function Doctors() {
                 <Filter className="w-4 h-4" />
                 Filter
               </Button>
+              <ExportExcelButton
+                rows={exportRows}
+                fileName={activeTab === "meetings" ? "doctor-meetings" : "doctors"}
+                sheetName={activeTab === "meetings" ? "Meetings" : "Doctors"}
+                label="Export to Excel"
+                variant="outline"
+              />
               <Dialog open={isAddDoctorOpen} onOpenChange={setIsAddDoctorOpen}>
                 <DialogTrigger asChild>
                   <Button size="sm" className="gap-2">

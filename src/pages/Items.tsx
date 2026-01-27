@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
+import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -61,6 +62,19 @@ export default function Items() {
       avgBalance,
     };
   }, [items]);
+
+  const exportRows = useMemo(
+    () =>
+      filteredItems.map((item) => ({
+        Code: item.code,
+        Name: item.name,
+        "Opening Balance": item.openingBalance,
+        Unit: item.unit,
+        Notes: item.notes || "",
+        Created: item.createdAt ? new Date(item.createdAt).toISOString().slice(0, 10) : "",
+      })),
+    [filteredItems]
+  );
 
   const fetchItems = async () => {
     if (!db) {
@@ -358,6 +372,13 @@ export default function Items() {
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
               </Button>
+              <ExportExcelButton
+                rows={exportRows}
+                fileName="items"
+                sheetName="Items"
+                label="Export to Excel"
+                variant="outline"
+              />
             </div>
             <Button onClick={handleAddItem}>
               <Plus className="h-4 w-4 mr-2" />

@@ -98,11 +98,9 @@ export default function Purchases() {
 
   const computedTotal = useMemo(() => {
     const quantity = safeNumber(formData.quantity);
-    const rate = formData.notTaxInvoice
-      ? safeNumber(formData.invoicePrice)
-      : safeNumber(formData.taxInvoicePrice) || safeNumber(formData.invoicePrice);
+    const rate = safeNumber(formData.invoicePrice);
     return quantity * rate;
-  }, [formData.invoicePrice, formData.notTaxInvoice, formData.quantity, formData.taxInvoicePrice]);
+  }, [formData.invoicePrice, formData.quantity]);
 
   const filteredPurchases = useMemo(() => {
     if (!search.trim()) return purchases;
@@ -299,25 +297,14 @@ export default function Purchases() {
     const taxInvoicePrice = safeNumber(formData.taxInvoicePrice);
     const unit = (formData.unit || selectedItem?.unit || "pcs").trim() || "pcs";
 
-    // If tax invoice, prefer taxInvoicePrice; else require invoicePrice
-    if (formData.notTaxInvoice) {
-      if (invoicePrice <= 0) {
-        toast({
-          title: "Validation error",
-          description: "Invoice Price is required for non-tax invoices.",
-          variant: "destructive",
-        });
-        return;
-      }
-    } else {
-      if (taxInvoicePrice <= 0 && invoicePrice <= 0) {
-        toast({
-          title: "Validation error",
-          description: "Tax Invoice Price (or Invoice Price) is required.",
-          variant: "destructive",
-        });
-        return;
-      }
+    // Total Price is computed from Invoice Price only (per unit)
+    if (invoicePrice <= 0) {
+      toast({
+        title: "Validation error",
+        description: "Invoice Price is required.",
+        variant: "destructive",
+      });
+      return;
     }
 
     const supplierName = selectedSupplier?.name || "";
@@ -649,7 +636,7 @@ export default function Purchases() {
                 <div className="flex-1">
                   <Label htmlFor="notTaxInvoice">Not a tax invoice</Label>
                   <p className="text-xs text-muted-foreground">
-                    If enabled, Total Price uses Invoice Price; otherwise it uses Tax Invoice Price.
+                    Total Price is always computed from Invoice Price.
                   </p>
                 </div>
               </div>

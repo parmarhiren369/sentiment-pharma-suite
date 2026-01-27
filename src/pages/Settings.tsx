@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, deleteDoc, doc, addDoc, Timestamp } from "firebase/firestore";
+import { collection, getDocs, deleteDoc, doc, addDoc, Timestamp, writeBatch } from "firebase/firestore";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +29,28 @@ export default function Settings() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const { toast } = useToast();
 
+  const deleteSnapshotInBatches = async (docs: Array<{ ref: ReturnType<typeof doc> }>) => {
+    // Firestore limits writes per batch to 500. Keep margin for safety.
+    const BATCH_SIZE = 450;
+    let deleted = 0;
+
+    for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+      const batch = writeBatch(db);
+      const chunk = docs.slice(i, i + BATCH_SIZE);
+      for (const d of chunk) batch.delete(d.ref);
+      await batch.commit();
+      deleted += chunk.length;
+    }
+
+    return deleted;
+  };
+
+  const deleteCollectionDocs = async (collectionName: string) => {
+    const snapshot = await getDocs(collection(db, collectionName));
+    if (snapshot.empty) return 0;
+    return deleteSnapshotInBatches(snapshot.docs);
+  };
+
   const deleteAllData = async () => {
     if (!db) {
       toast({
@@ -43,30 +65,30 @@ export default function Settings() {
     let totalDeleted = 0;
 
     try {
-      // Collections to delete
-      const collections = [
-        "batches",
+      // 1) Delete nested data first (doctors/*/patients)
+      const doctorsSnap = await getDocs(collection(db, "doctors"));
+      for (const doctorDoc of doctorsSnap.docs) {
+        const patientsSnap = await getDocs(collection(db, "doctors", doctorDoc.id, "patients"));
+        totalDeleted += await deleteSnapshotInBatches(patientsSnap.docs);
+      }
+
+      // 2) Delete top-level collections
+      // Keep this list in sync with collections used across the app.
+      const collectionsToDelete = [
+        "purchases",
+        "suppliers",
+        "items",
+        "customers",
         "rawInventory",
         "processedInventory",
-        "itemNameSuggestions"
+        "batches",
+        "itemNameSuggestions",
+        "doctors",
       ];
 
-      // Delete all documents from each collection
-      for (const collectionName of collections) {
-        const collectionRef = collection(db, collectionName);
-        const snapshot = await getDocs(collectionRef);
-        
-        console.log(`Deleting ${snapshot.size} documents from ${collectionName}...`);
-        
-        // Delete each document
-        const deletePromises = snapshot.docs.map(document => 
-          deleteDoc(doc(db, collectionName, document.id))
-        );
-        
-        await Promise.all(deletePromises);
-        totalDeleted += snapshot.size;
-        
-        console.log(`Deleted ${snapshot.size} documents from ${collectionName}`);
+      for (const collectionName of collectionsToDelete) {
+        console.log(`Deleting documents from ${collectionName}...`);
+        totalDeleted += await deleteCollectionDocs(collectionName);
       }
 
       toast({
@@ -380,11 +402,23 @@ export default function Settings() {
                       </li>
                       <li className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-destructive"></span>
+                        All purchases
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-destructive"></span>
+                        All suppliers, items, and customers
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-destructive"></span>
                         All raw inventory items
                       </li>
                       <li className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-destructive"></span>
                         All processed inventory items
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-destructive"></span>
+                        All doctors and patient records
                       </li>
                       <li className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-destructive"></span>
@@ -519,7 +553,8 @@ export default function Settings() {
               <ul className="mt-3 space-y-1 text-sm">
                 <li>• All batch records</li>
                 <li>• All inventory data</li>
-                <li>• All saved configurations</li>
+                <li>• All purchases, suppliers, items, and customers</li>
+                <li>• All doctors and patient records</li>
               </ul>
               <p className="mt-3 font-semibold text-destructive">
                 This action cannot be undone!

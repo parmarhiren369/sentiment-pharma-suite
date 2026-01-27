@@ -107,6 +107,23 @@ export default function Purchases() {
     return taxInvoicePrice > 0 ? taxInvoicePrice : invoicePrice;
   }, [formData.invoicePrice, formData.notTaxInvoice, formData.taxInvoicePrice]);
 
+  const hasInvoicePrice = safeNumber(formData.invoicePrice) > 0;
+  const hasTaxInvoicePrice = safeNumber(formData.taxInvoicePrice) > 0;
+
+  // Keep the "Not a tax invoice" flag in sync with the price fields.
+  // - If Tax Invoice Price is entered, force tax mode.
+  // - If Invoice Price is entered and no Tax Invoice Price exists, force non-tax mode.
+  useEffect(() => {
+    if (hasTaxInvoicePrice && formData.notTaxInvoice) {
+      setFormData((prev) => ({ ...prev, notTaxInvoice: false }));
+      return;
+    }
+
+    if (!hasTaxInvoicePrice && hasInvoicePrice && !formData.notTaxInvoice) {
+      setFormData((prev) => ({ ...prev, notTaxInvoice: true }));
+    }
+  }, [formData.notTaxInvoice, hasInvoicePrice, hasTaxInvoicePrice]);
+
   const filteredPurchases = useMemo(() => {
     if (!search.trim()) return purchases;
     const q = search.toLowerCase();
@@ -621,8 +638,20 @@ export default function Purchases() {
                     min="0"
                     step="0.01"
                     value={formData.invoicePrice}
-                    onChange={(e) => setFormData({ ...formData, invoicePrice: e.target.value })}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFormData((prev) => {
+                        const tax = safeNumber(prev.taxInvoicePrice);
+                        const invoice = safeNumber(value);
+                        return {
+                          ...prev,
+                          invoicePrice: value,
+                          notTaxInvoice: tax <= 0 && invoice > 0 ? true : prev.notTaxInvoice,
+                        };
+                      });
+                    }}
                     placeholder="0.00"
+                    disabled={hasTaxInvoicePrice}
                   />
                 </div>
 
@@ -634,7 +663,17 @@ export default function Purchases() {
                     min="0"
                     step="0.01"
                     value={formData.taxInvoicePrice}
-                    onChange={(e) => setFormData({ ...formData, taxInvoicePrice: e.target.value })}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFormData((prev) => {
+                        const tax = safeNumber(value);
+                        return {
+                          ...prev,
+                          taxInvoicePrice: value,
+                          notTaxInvoice: tax > 0 ? false : prev.notTaxInvoice,
+                        };
+                      });
+                    }}
                     placeholder="0.00"
                     disabled={formData.notTaxInvoice}
                   />
@@ -645,9 +684,14 @@ export default function Purchases() {
                 <Checkbox
                   id="notTaxInvoice"
                   checked={formData.notTaxInvoice}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, notTaxInvoice: Boolean(checked) })
-                  }
+                  onCheckedChange={(checked) => {
+                    const isNonTax = Boolean(checked);
+                    setFormData((prev) => ({
+                      ...prev,
+                      notTaxInvoice: isNonTax,
+                      taxInvoicePrice: isNonTax ? "" : prev.taxInvoicePrice,
+                    }));
+                  }}
                 />
                 <div className="flex-1">
                   <Label htmlFor="notTaxInvoice">Not a tax invoice</Label>

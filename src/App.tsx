@@ -18,6 +18,7 @@ import NotFound from "./pages/NotFound";
 import Processing from "./pages/Processing";
 import DoctorLogin from "./pages/DoctorLogin";
 import DoctorDashboard from "./pages/DoctorDashboard";
+import Items from "./pages/Items";
 import { Suspense } from "react";
 
 console.log("App.tsx loaded");
@@ -56,6 +57,7 @@ const App = () => {
                 <Route path="/doctor-dashboard" element={<DoctorDashboard />} />
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Index />} />
+                  <Route path="/items" element={<Items />} />
                   <Route path="/raw-inventory" element={<RawInventory />} />
                   <Route path="/processed-inventory" element={<ProcessedInventory />} />
                   <Route path="/processing" element={<Processing />} />

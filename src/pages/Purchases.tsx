@@ -97,10 +97,15 @@ export default function Purchases() {
   );
 
   const computedTotal = useMemo(() => {
-    const quantity = safeNumber(formData.quantity);
-    const rate = safeNumber(formData.invoicePrice);
-    return quantity * rate;
-  }, [formData.invoicePrice, formData.quantity]);
+    const invoicePrice = safeNumber(formData.invoicePrice);
+    const taxInvoicePrice = safeNumber(formData.taxInvoicePrice);
+
+    // Total Price is treated as per-unit price:
+    // - Non-tax invoice: Invoice Price
+    // - Tax invoice: Tax Invoice Price if provided, otherwise Invoice Price
+    if (formData.notTaxInvoice) return invoicePrice;
+    return taxInvoicePrice > 0 ? taxInvoicePrice : invoicePrice;
+  }, [formData.invoicePrice, formData.notTaxInvoice, formData.taxInvoicePrice]);
 
   const filteredPurchases = useMemo(() => {
     if (!search.trim()) return purchases;
@@ -297,14 +302,25 @@ export default function Purchases() {
     const taxInvoicePrice = safeNumber(formData.taxInvoicePrice);
     const unit = (formData.unit || selectedItem?.unit || "pcs").trim() || "pcs";
 
-    // Total Price is computed from Invoice Price only (per unit)
-    if (invoicePrice <= 0) {
-      toast({
-        title: "Validation error",
-        description: "Invoice Price is required.",
-        variant: "destructive",
-      });
-      return;
+    // Total Price is per-unit; pick Invoice Price or Tax Invoice Price accordingly
+    if (formData.notTaxInvoice) {
+      if (invoicePrice <= 0) {
+        toast({
+          title: "Validation error",
+          description: "Invoice Price is required for non-tax invoices.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      if (taxInvoicePrice <= 0 && invoicePrice <= 0) {
+        toast({
+          title: "Validation error",
+          description: "Tax Invoice Price (or Invoice Price) is required.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     const supplierName = selectedSupplier?.name || "";
@@ -636,7 +652,7 @@ export default function Purchases() {
                 <div className="flex-1">
                   <Label htmlFor="notTaxInvoice">Not a tax invoice</Label>
                   <p className="text-xs text-muted-foreground">
-                    Total Price is always computed from Invoice Price.
+                    If Tax Invoice Price is filled, Total Price uses it; otherwise Invoice Price.
                   </p>
                 </div>
               </div>

@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, Timestamp, updateDoc } from "firebase/firestore";
-import { ClipboardList, Hash, IndianRupee, PackagePlus, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ClipboardList, Hash, PackagePlus, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface ItemRecord {
   id: string;
@@ -25,6 +26,25 @@ interface ItemRecord {
   createdAt?: Date;
 }
 
+interface PurchaseLite {
+  itemId: string;
+  itemCode: string;
+  quantity: number;
+  totalPrice: number; // per-unit price
+  date: string; // YYYY-MM-DD
+}
+
+interface BatchLite {
+  batchDate: string; // YYYY-MM-DD
+  items: Array<{ rawItemId: string; useQuantity: number }>;
+}
+
+interface RawInventoryLite {
+  id: string;
+  itemCode?: string;
+  name?: string;
+}
+
 const defaultFormState = {
   code: "",
   name: "",
@@ -34,7 +54,11 @@ const defaultFormState = {
 };
 
 export default function Items() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<ItemRecord[]>([]);
+  const [inQtyByItemId, setInQtyByItemId] = useState<Record<string, number>>({});
+  const [outQtyByItemCode, setOutQtyByItemCode] = useState<Record<string, number>>({});
+  const [lastUnitPriceByItemId, setLastUnitPriceByItemId] = useState<Record<string, number>>({});
   const [search, setSearch] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ItemRecord | null>(null);
@@ -43,33 +67,63 @@ export default function Items() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
+  const itemsWithStock = useMemo(() => {
+    return items.map((item) => {
+      const inQty = inQtyByItemId[item.id] || 0;
+      const outQty = outQtyByItemCode[item.code] || 0;
+      const availableQty = (item.openingBalance || 0) + inQty - outQty;
+      const lastUnitPrice = lastUnitPriceByItemId[item.id] || 0;
+      const stockValue = availableQty * lastUnitPrice;
+
+      return {
+        ...item,
+        inQty,
+        outQty,
+        availableQty,
+        lastUnitPrice,
+        stockValue,
+      };
+    });
+  }, [items, inQtyByItemId, lastUnitPriceByItemId, outQtyByItemCode]);
+
   const filteredItems = useMemo(() => {
-    if (!search.trim()) return items;
-    return items.filter((item) =>
+    if (!search.trim()) return itemsWithStock;
+    return itemsWithStock.filter((item) =>
       `${item.code} ${item.name}`.toLowerCase().includes(search.toLowerCase())
     );
-  }, [items, search]);
+  }, [itemsWithStock, search]);
 
   const stats = useMemo(() => {
-    const totalOpening = items.reduce((sum, item) => sum + (item.openingBalance || 0), 0);
+    const totalOpeningQty = items.reduce((sum, item) => sum + (item.openingBalance || 0), 0);
+    const totalInQty = Object.values(inQtyByItemId).reduce((sum, v) => sum + (v || 0), 0);
+    const totalOutQty = Object.values(outQtyByItemCode).reduce((sum, v) => sum + (v || 0), 0);
+    const totalAvailableQty = filteredItems.reduce((sum, item: any) => sum + (item.availableQty || 0), 0);
     const latest = items[0]?.name || "—";
-    const avgBalance = items.length ? totalOpening / items.length : 0;
+    const avgOpeningQty = items.length ? totalOpeningQty / items.length : 0;
 
     return {
       totalItems: items.length,
-      totalOpening,
+      totalOpeningQty,
+      totalInQty,
+      totalOutQty,
+      totalAvailableQty,
       latest,
-      avgBalance,
+      avgOpeningQty,
     };
-  }, [items]);
+  }, [filteredItems, inQtyByItemId, items, outQtyByItemCode]);
 
   const exportRows = useMemo(
     () =>
       filteredItems.map((item) => ({
         Code: item.code,
         Name: item.name,
+        "In Qty": (item as any).inQty ?? 0,
         "Opening Balance": item.openingBalance,
         Unit: item.unit,
+        "Out Qty": (item as any).outQty ?? 0,
+        "Available Qty": (item as any).availableQty ?? 0,
+        "Last Unit Price": (item as any).lastUnitPrice ?? 0,
+        "Stock Value": (item as any).stockValue ?? 0,
         Notes: item.notes || "",
         Created: item.createdAt ? new Date(item.createdAt).toISOString().slice(0, 10) : "",
       })),
@@ -86,7 +140,6 @@ export default function Items() {
       return;
     }
 
-    setIsLoading(true);
     try {
       const itemsQuery = query(collection(db, "items"), orderBy("createdAt", "desc"));
       const snapshot = await getDocs(itemsQuery);
@@ -113,13 +166,120 @@ export default function Items() {
         description: "Could not load items from Firestore.",
         variant: "destructive",
       });
+    }
+  };
+
+  const fetchStockSummaries = async () => {
+    if (!db) return;
+
+    const [purchasesSnap, batchesSnap, rawInvSnap] = await Promise.all([
+      getDocs(collection(db, "purchases")),
+      getDocs(collection(db, "batches")),
+      getDocs(collection(db, "rawInventory")),
+    ]);
+
+    const purchases: PurchaseLite[] = purchasesSnap.docs
+      .map((d) => {
+        const data = d.data();
+        return {
+          itemId: (data.itemId || "").toString(),
+          itemCode: (data.itemCode || "").toString(),
+          date: (data.date || "").toString(),
+          quantity: typeof data.quantity === "number" ? data.quantity : parseFloat(data.quantity) || 0,
+          totalPrice: typeof data.totalPrice === "number" ? data.totalPrice : parseFloat(data.totalPrice) || 0,
+        } as PurchaseLite;
+      })
+      .filter((p) => p.itemId && p.itemCode);
+
+    const batches: BatchLite[] = batchesSnap.docs
+      .map((d) => {
+        const data = d.data();
+        const items = Array.isArray(data.items) ? data.items : [];
+        return {
+          batchDate: (data.batchDate || "").toString(),
+          items: items
+            .map((it: any) => ({
+              rawItemId: (it.rawItemId || "").toString(),
+              useQuantity: typeof it.useQuantity === "number" ? it.useQuantity : parseFloat(it.useQuantity) || 0,
+            }))
+            .filter((it: any) => it.rawItemId),
+        } as BatchLite;
+      })
+      .filter((b) => b.batchDate);
+
+    const rawInventory: RawInventoryLite[] = rawInvSnap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        itemCode: (data.itemCode || "").toString() || undefined,
+        name: (data.name || "").toString() || undefined,
+      } as RawInventoryLite;
+    });
+
+    const nextInQtyByItemId: Record<string, number> = {};
+    const nextLastUnitPriceByItemId: Record<string, number> = {};
+    const nextLastDateByItemId: Record<string, string> = {};
+
+    for (const p of purchases) {
+      nextInQtyByItemId[p.itemId] = (nextInQtyByItemId[p.itemId] || 0) + (p.quantity || 0);
+      const prevDate = nextLastDateByItemId[p.itemId] || "";
+      if (!prevDate || (p.date && p.date >= prevDate)) {
+        nextLastDateByItemId[p.itemId] = p.date;
+        nextLastUnitPriceByItemId[p.itemId] = p.totalPrice || 0;
+      }
+    }
+
+    const outQtyByRawId: Record<string, number> = {};
+    for (const b of batches) {
+      for (const it of b.items) {
+        outQtyByRawId[it.rawItemId] = (outQtyByRawId[it.rawItemId] || 0) + (it.useQuantity || 0);
+      }
+    }
+
+    const rawIdToCode: Record<string, string> = {};
+    for (const ri of rawInventory) {
+      if (ri.itemCode) rawIdToCode[ri.id] = ri.itemCode;
+    }
+
+    const nextOutQtyByItemCode: Record<string, number> = {};
+    for (const [rawId, qty] of Object.entries(outQtyByRawId)) {
+      const code = rawIdToCode[rawId];
+      if (!code) continue;
+      nextOutQtyByItemCode[code] = (nextOutQtyByItemCode[code] || 0) + (qty || 0);
+    }
+
+    setInQtyByItemId(nextInQtyByItemId);
+    setLastUnitPriceByItemId(nextLastUnitPriceByItemId);
+    setOutQtyByItemCode(nextOutQtyByItemCode);
+  };
+
+  const fetchAll = async () => {
+    if (!db) {
+      toast({
+        title: "Database unavailable",
+        description: "Firebase is not initialized. Please check your environment variables.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await Promise.all([fetchItems(), fetchStockSummaries()]);
+    } catch (error) {
+      console.error("Error loading items/stock", error);
+      toast({
+        title: "Load failed",
+        description: "Could not load items/stock data from Firestore.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchItems();
+    fetchAll();
   }, []);
 
   const resetForm = () => {
@@ -160,7 +320,7 @@ export default function Items() {
     try {
       await deleteDoc(doc(db, "items", itemId));
       toast({ title: "Item deleted", description: "The item has been removed." });
-      fetchItems();
+      fetchAll();
     } catch (error) {
       console.error("Error deleting item", error);
       toast({
@@ -235,7 +395,7 @@ export default function Items() {
 
       setIsDialogOpen(false);
       resetForm();
-      fetchItems();
+      fetchAll();
     } catch (error) {
       console.error("Error adding item", error);
       toast({
@@ -264,7 +424,16 @@ export default function Items() {
       header: "Item Name",
       render: (item: ItemRecord) => (
         <div>
-          <p className="font-medium">{item.name}</p>
+          <button
+            type="button"
+            className="font-medium text-left hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/items/${item.id}`);
+            }}
+          >
+            {item.name}
+          </button>
           {item.notes && (
             <p className="text-xs text-muted-foreground line-clamp-1">{item.notes}</p>
           )}
@@ -272,21 +441,34 @@ export default function Items() {
       ),
     },
     {
+      key: "inQty",
+      header: "In Qty",
+      render: (item: any) => <span className="font-medium">{(item.inQty || 0).toLocaleString("en-IN")}</span>,
+    },
+    {
       key: "openingBalance",
-      header: "Opening Balance",
-      render: (item: ItemRecord) => (
-        <div className="flex items-center gap-1 font-semibold">
-          <IndianRupee className="h-4 w-4 text-muted-foreground" />
-          <span>{item.openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-        </div>
-      ),
+      header: "Opening",
+      render: (item: ItemRecord) => <span className="font-medium">{(item.openingBalance || 0).toLocaleString("en-IN")}</span>,
     },
     {
       key: "unit",
       header: "Unit",
-      render: (item: ItemRecord) => (
-        <span className="text-sm text-muted-foreground uppercase">{item.unit}</span>
-      ),
+      render: (item: ItemRecord) => <span className="text-sm text-muted-foreground uppercase">{item.unit}</span>,
+    },
+    {
+      key: "outQty",
+      header: "Out Qty",
+      render: (item: any) => <span className="font-medium">{(item.outQty || 0).toLocaleString("en-IN")}</span>,
+    },
+    {
+      key: "availableQty",
+      header: "Available",
+      render: (item: any) => <span className="font-semibold">{(item.availableQty || 0).toLocaleString("en-IN")}</span>,
+    },
+    {
+      key: "stockValue",
+      header: "Stock Value",
+      render: (item: any) => <span className="font-medium">₹{(item.stockValue || 0).toLocaleString("en-IN")}</span>,
     },
     {
       key: "createdAt",
@@ -301,7 +483,7 @@ export default function Items() {
       key: "actions",
       header: "Actions",
       render: (item: ItemRecord) => (
-        <div className="flex gap-2">
+        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
           <Button
             variant="ghost"
             size="sm"
@@ -333,27 +515,27 @@ export default function Items() {
             title="Total Items"
             value={stats.totalItems}
             icon={ClipboardList}
-            change={`Avg ₹${stats.avgBalance.toFixed(2)}`}
+            change={`Avg opening ${stats.avgOpeningQty.toFixed(2)}`}
             subtitle="Items tracked in Firestore"
           />
           <StatCard
-            title="Opening Balance"
-            value={`₹${stats.totalOpening.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`}
-            icon={IndianRupee}
-            changeType="neutral"
-            subtitle="Aggregate opening value"
-          />
-          <StatCard
-            title="Latest Item"
-            value={stats.latest}
+            title="Opening Qty"
+            value={stats.totalOpeningQty.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
             icon={PackagePlus}
             changeType="neutral"
-            subtitle="Most recently added"
+            subtitle="Aggregate opening quantity"
+          />
+          <StatCard
+            title="Available Qty"
+            value={stats.totalAvailableQty.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+            icon={RefreshCw}
+            changeType="neutral"
+            subtitle={`In ${stats.totalInQty.toLocaleString("en-IN")} / Out ${stats.totalOutQty.toLocaleString("en-IN")}`}
           />
           <StatCard
             title="Searchable"
             value={`${filteredItems.length} results`}
-            icon={RefreshCw}
+            icon={ClipboardList}
             changeType="neutral"
             subtitle={search ? "Filtered view" : "Showing all items"}
           />
@@ -368,7 +550,7 @@ export default function Items() {
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-72"
               />
-              <Button variant="secondary" onClick={fetchItems} disabled={isLoading}>
+              <Button variant="secondary" onClick={fetchAll} disabled={isLoading}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
               </Button>
@@ -391,7 +573,12 @@ export default function Items() {
               {isLoading ? "Loading items..." : "No items found. Add your first item."}
             </div>
           ) : (
-            <DataTable data={filteredItems} columns={columns} keyField="id" />
+            <DataTable
+              data={filteredItems}
+              columns={columns}
+              keyField="id"
+              onRowClick={(row: any) => navigate(`/items/${row.id}`)}
+            />
           )}
         </Card>
       </div>
@@ -435,7 +622,7 @@ export default function Items() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="openingBalance">Opening Balance</Label>
+                  <Label htmlFor="openingBalance">Opening Balance (Qty)</Label>
                   <Input
                     id="openingBalance"
                     type="number"

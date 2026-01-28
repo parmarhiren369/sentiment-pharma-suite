@@ -19,6 +19,7 @@ import Processing from "./pages/Processing";
 import DoctorLogin from "./pages/DoctorLogin";
 import DoctorDashboard from "./pages/DoctorDashboard";
 import Items from "./pages/Items";
+import ItemMonthlyReport from "./pages/ItemMonthlyReport";
 import Purchases from "./pages/Purchases";
 import Transactions from "./pages/Transactions";
 import Payments from "./pages/Payments";
@@ -63,6 +64,7 @@ const App = () => {
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Index />} />
                   <Route path="/items" element={<Items />} />
+                  <Route path="/items/:itemId" element={<ItemMonthlyReport />} />
                   <Route path="/purchases" element={<Purchases />} />
                   <Route path="/raw-inventory" element={<RawInventory />} />
                   <Route path="/processed-inventory" element={<ProcessedInventory />} />

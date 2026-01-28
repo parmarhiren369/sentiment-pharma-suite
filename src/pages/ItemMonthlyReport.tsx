@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, setDoc, Timestamp, where } from "firebase/firestore";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 
 interface ItemRecord {
@@ -70,6 +70,7 @@ export default function ItemMonthlyReport() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
   const [isLoading, setIsLoading] = useState(false);
+  const [reportRun, setReportRun] = useState(0);
 
   const months = useMemo(
     () => [
@@ -183,6 +184,8 @@ export default function ItemMonthlyReport() {
         })
         .filter((b) => b.batchDate);
       setBatches(batchesList);
+
+      setReportRun((v) => v + 1);
     } catch (error) {
       console.error("Error loading item report", error);
       toast({
@@ -240,7 +243,7 @@ export default function ItemMonthlyReport() {
       const stockValue = runningAvailable * lastUnitPrice;
 
       return {
-        month: monthName,
+        month: `${monthName.toLowerCase()} ${year}`,
         inQty,
         outQty,
         availableQty: runningAvailable,
@@ -251,18 +254,53 @@ export default function ItemMonthlyReport() {
     });
   }, [batches, item, months, purchases, rawIds, year, yearPurchases]);
 
+  useEffect(() => {
+    if (!db) return;
+    if (!itemId) return;
+    if (!item) return;
+    if (!rows.length) return;
+    if (reportRun === 0) return;
+
+    const persist = async () => {
+      try {
+        const docId = `${itemId}_${year}`;
+        await setDoc(
+          doc(db, "itemMonthlyReports", docId),
+          {
+            itemId,
+            itemCode: item.code,
+            itemName: item.name,
+            unit: item.unit,
+            year,
+            rows,
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true }
+        );
+      } catch (e) {
+        console.warn("Could not persist item monthly report snapshot", e);
+      }
+    };
+
+    persist();
+  }, [db, item, itemId, reportRun, rows, year]);
+
   const columns = useMemo(
     () => [
       { key: "month", header: "Month" },
       {
         key: "inQty",
         header: "In Qty",
-        render: (r: MonthRow) => <span className="font-medium">{r.inQty.toLocaleString("en-IN")}</span>,
+        render: (r: MonthRow) => (
+          <span className="font-medium text-emerald-600">{r.inQty.toLocaleString("en-IN")}</span>
+        ),
       },
       {
         key: "outQty",
         header: "Out Qty",
-        render: (r: MonthRow) => <span className="font-medium">{r.outQty.toLocaleString("en-IN")}</span>,
+        render: (r: MonthRow) => (
+          <span className="font-medium text-red-600">{r.outQty.toLocaleString("en-IN")}</span>
+        ),
       },
       {
         key: "availableQty",

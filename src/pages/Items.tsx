@@ -443,7 +443,9 @@ export default function Items() {
     {
       key: "inQty",
       header: "In Qty",
-      render: (item: any) => <span className="font-medium">{(item.inQty || 0).toLocaleString("en-IN")}</span>,
+      render: (item: any) => (
+        <span className="font-medium text-emerald-600">{(item.inQty || 0).toLocaleString("en-IN")}</span>
+      ),
     },
     {
       key: "openingBalance",
@@ -458,7 +460,9 @@ export default function Items() {
     {
       key: "outQty",
       header: "Out Qty",
-      render: (item: any) => <span className="font-medium">{(item.outQty || 0).toLocaleString("en-IN")}</span>,
+      render: (item: any) => (
+        <span className="font-medium text-red-600">{(item.outQty || 0).toLocaleString("en-IN")}</span>
+      ),
     },
     {
       key: "availableQty",

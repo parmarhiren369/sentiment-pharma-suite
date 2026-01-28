@@ -20,6 +20,10 @@ import DoctorLogin from "./pages/DoctorLogin";
 import DoctorDashboard from "./pages/DoctorDashboard";
 import Items from "./pages/Items";
 import Purchases from "./pages/Purchases";
+import Transactions from "./pages/Transactions";
+import Payments from "./pages/Payments";
+import Invoices from "./pages/Invoices";
+import DebitCreditNotes from "./pages/DebitCreditNotes";
 import { Suspense } from "react";
 
 console.log("App.tsx loaded");
@@ -64,6 +68,10 @@ const App = () => {
                   <Route path="/processed-inventory" element={<ProcessedInventory />} />
                   <Route path="/processing" element={<Processing />} />
                   <Route path="/accounting" element={<Accounting />} />
+                  <Route path="/transactions" element={<Transactions />} />
+                  <Route path="/payments" element={<Payments />} />
+                  <Route path="/invoices" element={<Invoices />} />
+                  <Route path="/debit-credit-notes" element={<DebitCreditNotes />} />
                   <Route path="/doctors" element={<Doctors />} />
                   <Route path="/loss-calculation" element={<LossCalculation />} />
                   <Route path="/suppliers" element={<SupplierList />} />

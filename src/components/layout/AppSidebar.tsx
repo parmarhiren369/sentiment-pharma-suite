@@ -13,7 +13,11 @@ import {
   Users,
   UserCheck,
   ClipboardList,
-  ShoppingCart
+  ShoppingCart,
+  ArrowLeftRight,
+  CreditCard,
+  FileText,
+  FileMinus
 } from "lucide-react";
 
 const mainMenuItems = [
@@ -24,6 +28,10 @@ const mainMenuItems = [
   { title: "Raw Inventory", url: "/raw-inventory", icon: Package },
   { title: "Processed Inventory", url: "/processed-inventory", icon: Boxes },
   { title: "Accounting", url: "/accounting", icon: Receipt },
+  { title: "Transactions", url: "/transactions", icon: ArrowLeftRight },
+  { title: "Payments", url: "/payments", icon: CreditCard },
+  { title: "Invoices", url: "/invoices", icon: FileText },
+  { title: "Debit/Credit Notes", url: "/debit-credit-notes", icon: FileMinus },
   { title: "Doctors", url: "/doctors", icon: Stethoscope },
   { title: "Loss Calculation", url: "/loss-calculation", icon: Calculator },
   { title: "Supplier List", url: "/suppliers", icon: Users },

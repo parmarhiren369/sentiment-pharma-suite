@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
@@ -16,6 +16,10 @@ import {
   PiggyBank
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { useNavigate } from "react-router-dom";
 
 type TabType = "overview" | "income" | "expenses" | "invoices";
 
@@ -23,7 +27,7 @@ interface Transaction {
   id: string;
   description: string;
   category: string;
-  amount: string;
+  amount: number;
   type: "Income" | "Expense";
   date: string;
   status: "Completed" | "Pending" | "Failed";
@@ -34,18 +38,21 @@ interface Invoice {
   id: string;
   invoiceNo: string;
   customer: string;
-  amount: string;
+  amount: number;
   issueDate: string;
   dueDate: string;
   status: "Paid" | "Pending" | "Overdue";
 }
 
-const transactions: Transaction[] = [];
-
-const invoices: Invoice[] = [];
+const rupees = (value: number) => `₹${(value || 0).toLocaleString("en-IN")}`;
 
 export default function Accounting() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>("overview");
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
   const transactionColumns = [
     { key: "description" as keyof Transaction, header: "Description" },
@@ -55,7 +62,7 @@ export default function Accounting() {
       header: "Amount",
       render: (item: Transaction) => (
         <span className={item.type === "Income" ? "text-success font-medium" : "text-destructive font-medium"}>
-          {item.type === "Income" ? "+" : "-"}{item.amount}
+          {item.type === "Income" ? "+" : "-"}{rupees(item.amount)}
         </span>
       )
     },
@@ -92,7 +99,7 @@ export default function Accounting() {
       key: "amount" as keyof Invoice, 
       header: "Amount",
       render: (item: Invoice) => (
-        <span className="font-medium text-foreground">{item.amount}</span>
+        <span className="font-medium text-foreground">{rupees(item.amount)}</span>
       )
     },
     { key: "issueDate" as keyof Invoice, header: "Issue Date" },
@@ -122,17 +129,113 @@ export default function Accounting() {
   const incomeTransactions = transactions.filter(t => t.type === "Income");
   const expenseTransactions = transactions.filter(t => t.type === "Expense");
 
+  const fetchTransactions = async () => {
+    const qy = query(collection(db, "transactions"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(qy);
+    const list = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        description: (data.description || "").toString(),
+        category: (data.category || "General").toString(),
+        amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
+        type: (data.type || "Income") as Transaction["type"],
+        date: (data.date || "").toString(),
+        status: (data.status || "Completed") as Transaction["status"],
+        reference: (data.reference || "").toString(),
+      } as Transaction;
+    });
+    setTransactions(list);
+  };
+
+  const fetchInvoices = async () => {
+    const qy = query(collection(db, "invoices"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(qy);
+    const list = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        invoiceNo: (data.invoiceNo || "").toString(),
+        customer: (data.partyName || data.customer || "").toString(),
+        amount: typeof data.total === "number" ? data.total : typeof data.amount === "number" ? data.amount : parseFloat(data.total ?? data.amount) || 0,
+        issueDate: (data.issueDate || data.date || "").toString(),
+        dueDate: (data.dueDate || "").toString(),
+        status: (data.status || "Pending") as Invoice["status"],
+      } as Invoice;
+    });
+    setInvoices(list);
+  };
+
+  const fetchAll = async () => {
+    if (!db) {
+      toast({
+        title: "Database unavailable",
+        description: "Firebase is not initialized. Please check your environment variables.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await Promise.all([fetchTransactions(), fetchInvoices()]);
+    } catch (error) {
+      console.error("Error loading accounting data", error);
+      toast({
+        title: "Load failed",
+        description: "Could not load transactions/invoices from Firestore.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAll();
+  }, []);
+
   const exportRows = useMemo(() => {
     switch (activeTab) {
       case "income":
-        return incomeTransactions;
+        return incomeTransactions.map((t) => ({
+          Date: t.date,
+          Type: t.type,
+          Amount: t.amount,
+          Category: t.category,
+          Description: t.description,
+          Status: t.status,
+          Reference: t.reference,
+        }));
       case "expenses":
-        return expenseTransactions;
+        return expenseTransactions.map((t) => ({
+          Date: t.date,
+          Type: t.type,
+          Amount: t.amount,
+          Category: t.category,
+          Description: t.description,
+          Status: t.status,
+          Reference: t.reference,
+        }));
       case "invoices":
-        return invoices;
+        return invoices.map((i) => ({
+          "Invoice No": i.invoiceNo,
+          Customer: i.customer,
+          Amount: i.amount,
+          "Issue Date": i.issueDate,
+          "Due Date": i.dueDate,
+          Status: i.status,
+        }));
       case "overview":
       default:
-        return transactions;
+        return transactions.map((t) => ({
+          Date: t.date,
+          Type: t.type,
+          Amount: t.amount,
+          Category: t.category,
+          Description: t.description,
+          Status: t.status,
+          Reference: t.reference,
+        }));
     }
   }, [activeTab, incomeTransactions, expenseTransactions]);
 
@@ -159,7 +262,7 @@ export default function Accounting() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
             title="Total Revenue"
-            value={`₹${(incomeTransactions.reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₹,]/g, '')), 0) / 100000).toFixed(1)}L`}
+            value={rupees(incomeTransactions.reduce((sum, t) => sum + (t.amount || 0), 0))}
             change="+15%"
             changeType="positive"
             icon={DollarSign}
@@ -168,7 +271,7 @@ export default function Accounting() {
           />
           <StatCard
             title="Total Expenses"
-            value={`₹${(expenseTransactions.reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₹,]/g, '')), 0) / 100000).toFixed(1)}L`}
+            value={rupees(expenseTransactions.reduce((sum, t) => sum + (t.amount || 0), 0))}
             change="+8%"
             changeType="negative"
             icon={CreditCard}
@@ -177,8 +280,10 @@ export default function Accounting() {
           />
           <StatCard
             title="Net Profit"
-            value={`₹${((incomeTransactions.reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₹,]/g, '')), 0) - 
-                          expenseTransactions.reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₹,]/g, '')), 0)) / 100000).toFixed(1)}L`}
+            value={rupees(
+              incomeTransactions.reduce((sum, t) => sum + (t.amount || 0), 0) -
+                expenseTransactions.reduce((sum, t) => sum + (t.amount || 0), 0)
+            )}
             change="+22%"
             changeType="positive"
             icon={Wallet}
@@ -187,7 +292,7 @@ export default function Accounting() {
           />
           <StatCard
             title="Pending Invoices"
-            value={`₹${(invoices.filter(i => i.status === "Pending" || i.status === "Overdue").reduce((sum, i) => sum + parseFloat(i.amount.replace(/[₹,]/g, '')), 0) / 100000).toFixed(2)}L`}
+            value={rupees(invoices.filter((i) => i.status === "Pending" || i.status === "Overdue").reduce((sum, i) => sum + (i.amount || 0), 0))}
             change={`${invoices.filter(i => i.status === "Pending" || i.status === "Overdue").length} invoices`}
             changeType="neutral"
             icon={PiggyBank}
@@ -217,9 +322,9 @@ export default function Accounting() {
               ))}
             </div>
             <div className="flex items-center gap-2 py-2">
-              <Button variant="outline" size="sm" className="gap-2">
-                <Filter className="w-4 h-4" />
-                Filter
+              <Button variant="outline" size="sm" className="gap-2" onClick={fetchAll} disabled={isLoading}>
+                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+                Refresh
               </Button>
               <ExportExcelButton
                 rows={exportRows as unknown as Array<Record<string, unknown>>}
@@ -248,7 +353,15 @@ export default function Accounting() {
                 </p>
               </div>
               <Button className="gap-2">
-                View All <ArrowRight className="w-4 h-4" />
+                {activeTab === "invoices" ? (
+                  <span className="flex items-center gap-2" onClick={() => navigate("/invoices")}>
+                    View All <ArrowRight className="w-4 h-4" />
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2" onClick={() => navigate("/transactions")}>
+                    View All <ArrowRight className="w-4 h-4" />
+                  </span>
+                )}
               </Button>
             </div>
 
@@ -281,8 +394,8 @@ export default function Accounting() {
             </div>
             <p className="text-3xl font-bold text-foreground">
               {incomeTransactions.length > 0 
-                ? `₹${(incomeTransactions.reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₹,]/g, '')), 0) / 100000).toFixed(1)}L`
-                : "₹0"}
+                ? rupees(incomeTransactions.reduce((sum, t) => sum + (t.amount || 0), 0))
+                : rupees(0)}
             </p>
             <p className="text-sm text-success mt-1">{incomeTransactions.length} transactions</p>
           </div>
@@ -293,8 +406,8 @@ export default function Accounting() {
             </div>
             <p className="text-3xl font-bold text-foreground">
               {expenseTransactions.length > 0 
-                ? `₹${(expenseTransactions.reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₹,]/g, '')), 0) / 100000).toFixed(1)}L`
-                : "₹0"}
+                ? rupees(expenseTransactions.reduce((sum, t) => sum + (t.amount || 0), 0))
+                : rupees(0)}
             </p>
             <p className="text-sm text-destructive mt-1">{expenseTransactions.length} transactions</p>
           </div>
@@ -305,8 +418,8 @@ export default function Accounting() {
             </div>
             <p className="text-3xl font-bold text-foreground">
               {invoices.filter(i => i.status !== "Paid").length > 0 
-                ? `₹${(invoices.filter(i => i.status !== "Paid").reduce((sum, i) => sum + parseFloat(i.amount.replace(/[₹,]/g, '')), 0) / 100000).toFixed(1)}L`
-                : "₹0"}
+                ? rupees(invoices.filter(i => i.status !== "Paid").reduce((sum, i) => sum + (i.amount || 0), 0))
+                : rupees(0)}
             </p>
             <p className="text-sm text-warning mt-1">{invoices.filter(i => i.status !== "Paid").length} pending invoices</p>
           </div>

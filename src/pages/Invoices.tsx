@@ -104,6 +104,12 @@ export default function Invoices() {
   const partyOptions = useMemo(() => (formData.partyType === "supplier" ? suppliers : customers), [customers, suppliers, formData.partyType]);
   const selectedParty = useMemo(() => partyOptions.find((p) => p.id === formData.partyId), [partyOptions, formData.partyId]);
 
+  const processedInventoryById = useMemo(() => {
+    const map = new Map<string, ProcessedInventoryOption>();
+    for (const it of processedInventoryOptions) map.set(it.id, it);
+    return map;
+  }, [processedInventoryOptions]);
+
   const computedSubtotal = useMemo(() => {
     if (lineItems.length) {
       return lineItems.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.rate) || 0), 0);
@@ -147,12 +153,19 @@ export default function Invoices() {
         Date: i.issueDate,
         Customer: i.partyName,
         PIN: i.pin || "",
-        Items: (i.items || []).map((x) => `${x.name} (${x.quantity} ${x.unit})`).join(", "),
+        Items: (i.items || [])
+          .map((x) => {
+            const resolved = x.processedInventoryId ? processedInventoryById.get(x.processedInventoryId) : undefined;
+            const name = resolved?.name || x.name;
+            const unit = resolved?.unit || x.unit;
+            return `${name} (${x.quantity} ${unit})`;
+          })
+          .join(", "),
         "Total Amount": i.total,
         Status: i.status,
         Notes: i.notes || "",
       })),
-    [filtered]
+    [filtered, processedInventoryById]
   );
 
   const fetchParties = async () => {
@@ -420,7 +433,14 @@ export default function Invoices() {
         key: "items",
         header: "Items",
         render: (i: InvoiceRecord) => {
-          const label = (i.items || []).map((x) => `${x.name} (${x.quantity} ${x.unit})`).join(", ");
+          const label = (i.items || [])
+            .map((x) => {
+              const resolved = x.processedInventoryId ? processedInventoryById.get(x.processedInventoryId) : undefined;
+              const name = resolved?.name || x.name;
+              const unit = resolved?.unit || x.unit;
+              return `${name} (${x.quantity} ${unit})`;
+            })
+            .join(", ");
           return <span className="text-sm text-muted-foreground">{label || "—"}</span>;
         },
       },
@@ -447,7 +467,7 @@ export default function Invoices() {
         ),
       },
     ],
-    []
+    [processedInventoryById]
   );
 
   return (

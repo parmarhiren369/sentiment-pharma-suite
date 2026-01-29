@@ -27,14 +27,31 @@ import { FileText, IndianRupee, Pencil, Plus, RefreshCw, Trash2 } from "lucide-r
 
 type InvoiceStatus = "Paid" | "Pending" | "Overdue";
 
+interface ProcessedInventoryOption {
+  id: string;
+  name: string;
+  unit?: string;
+}
+
+interface InvoiceLineItem {
+  processedInventoryId: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  rate: number;
+}
+
 interface InvoiceRecord {
   id: string;
   invoiceNo: string;
+  cuNumber?: string;
+  pin?: string;
   partyType: "customer" | "supplier";
   partyId: string;
   partyName: string;
   issueDate: string; // YYYY-MM-DD
   dueDate: string; // YYYY-MM-DD
+  items?: InvoiceLineItem[];
   subtotal: number;
   tax: number;
   total: number;
@@ -50,6 +67,8 @@ interface PartyOption {
 
 const defaultFormState = {
   invoiceNo: "",
+  cuNumber: "",
+  pin: "",
   partyType: "customer" as InvoiceRecord["partyType"],
   partyId: "",
   issueDate: new Date().toISOString().slice(0, 10),
@@ -69,6 +88,7 @@ export default function Invoices() {
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [customers, setCustomers] = useState<PartyOption[]>([]);
   const [suppliers, setSuppliers] = useState<PartyOption[]>([]);
+  const [processedInventoryOptions, setProcessedInventoryOptions] = useState<ProcessedInventoryOption[]>([]);
 
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -77,17 +97,25 @@ export default function Invoices() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editing, setEditing] = useState<InvoiceRecord | null>(null);
   const [formData, setFormData] = useState(defaultFormState);
+  const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([]);
 
   const { toast } = useToast();
 
   const partyOptions = useMemo(() => (formData.partyType === "supplier" ? suppliers : customers), [customers, suppliers, formData.partyType]);
   const selectedParty = useMemo(() => partyOptions.find((p) => p.id === formData.partyId), [partyOptions, formData.partyId]);
 
+  const computedSubtotal = useMemo(() => {
+    if (lineItems.length) {
+      return lineItems.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.rate) || 0), 0);
+    }
+    return safeNumber(formData.subtotal);
+  }, [formData.subtotal, lineItems]);
+
   const computedTotal = useMemo(() => {
-    const subtotal = safeNumber(formData.subtotal);
+    const subtotal = computedSubtotal;
     const tax = safeNumber(formData.tax);
     return Math.max(0, subtotal + tax);
-  }, [formData.subtotal, formData.tax]);
+  }, [computedSubtotal, formData.tax]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return invoices;
@@ -114,13 +142,13 @@ export default function Invoices() {
   const exportRows = useMemo(
     () =>
       filtered.map((i) => ({
-        "Invoice No": i.invoiceNo,
-        Party: i.partyName,
-        "Issue Date": i.issueDate,
-        "Due Date": i.dueDate,
-        Subtotal: i.subtotal,
-        Tax: i.tax,
-        Total: i.total,
+        "System Invoice": i.invoiceNo,
+        "CU Number": i.cuNumber || "",
+        Date: i.issueDate,
+        Customer: i.partyName,
+        PIN: i.pin || "",
+        Items: (i.items || []).map((x) => `${x.name} (${x.quantity} ${x.unit})`).join(", "),
+        "Total Amount": i.total,
         Status: i.status,
         Notes: i.notes || "",
       })),
@@ -147,19 +175,54 @@ export default function Invoices() {
     setSuppliers(suppliersList);
   };
 
+  const fetchProcessedInventoryOptions = async () => {
+    const snap = await getDocs(collection(db, "processedInventory"));
+    const list = snap.docs
+      .map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: (data.name || "").toString(),
+          unit: (data.unit || "").toString() || undefined,
+        } as ProcessedInventoryOption;
+      })
+      .filter((x) => x.name)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    setProcessedInventoryOptions(list);
+  };
+
   const fetchInvoices = async () => {
     const qy = query(collection(db, "invoices"), orderBy("createdAt", "desc"));
     const snap = await getDocs(qy);
     const list = snap.docs.map((d) => {
       const data = d.data();
+
+      const rawItems = Array.isArray(data.items) ? data.items : [];
+      const items: InvoiceLineItem[] = rawItems
+        .map((it: any) => {
+          const quantity = typeof it.quantity === "number" ? it.quantity : parseFloat(it.quantity) || 0;
+          const rate = typeof it.rate === "number" ? it.rate : parseFloat(it.rate) || 0;
+          return {
+            processedInventoryId: (it.processedInventoryId || "").toString(),
+            name: (it.name || "").toString(),
+            unit: (it.unit || "").toString() || "pcs",
+            quantity,
+            rate,
+          } as InvoiceLineItem;
+        })
+        .filter((it: InvoiceLineItem) => it.name);
+
       return {
         id: d.id,
         invoiceNo: (data.invoiceNo || "").toString(),
+        cuNumber: (data.cuNumber || "").toString() || undefined,
+        pin: (data.pin || "").toString() || undefined,
         partyType: (data.partyType || "customer") as InvoiceRecord["partyType"],
         partyId: (data.partyId || "").toString(),
         partyName: (data.partyName || "").toString(),
         issueDate: (data.issueDate || "").toString(),
         dueDate: (data.dueDate || "").toString(),
+        items,
         subtotal: typeof data.subtotal === "number" ? data.subtotal : parseFloat(data.subtotal) || 0,
         tax: typeof data.tax === "number" ? data.tax : parseFloat(data.tax) || 0,
         total: typeof data.total === "number" ? data.total : parseFloat(data.total) || 0,
@@ -183,7 +246,7 @@ export default function Invoices() {
 
     setIsLoading(true);
     try {
-      await Promise.all([fetchParties(), fetchInvoices()]);
+      await Promise.all([fetchParties(), fetchProcessedInventoryOptions(), fetchInvoices()]);
     } catch (error) {
       console.error("Error fetching invoices", error);
       toast({
@@ -208,6 +271,7 @@ export default function Invoices() {
       dueDate: new Date().toISOString().slice(0, 10),
       tax: "0",
     });
+    setLineItems([]);
   };
 
   const openAdd = () => {
@@ -219,6 +283,8 @@ export default function Invoices() {
     setEditing(row);
     setFormData({
       invoiceNo: row.invoiceNo,
+      cuNumber: row.cuNumber || "",
+      pin: row.pin || "",
       partyType: row.partyType,
       partyId: row.partyId,
       issueDate: row.issueDate,
@@ -228,6 +294,7 @@ export default function Invoices() {
       status: row.status,
       notes: row.notes || "",
     });
+    setLineItems(row.items || []);
     setIsDialogOpen(true);
   };
 
@@ -271,20 +338,33 @@ export default function Invoices() {
       return;
     }
 
-    const subtotal = safeNumber(formData.subtotal);
+    const subtotal = computedSubtotal;
     const tax = safeNumber(formData.tax);
     if (subtotal < 0 || tax < 0) {
       toast({ title: "Validation error", description: "Amounts cannot be negative.", variant: "destructive" });
       return;
     }
 
+    const sanitizedItems: InvoiceLineItem[] = lineItems
+      .map((it) => ({
+        processedInventoryId: (it.processedInventoryId || "").toString(),
+        name: (it.name || "").toString(),
+        unit: (it.unit || "").toString() || "pcs",
+        quantity: Number(it.quantity) || 0,
+        rate: Number(it.rate) || 0,
+      }))
+      .filter((it) => it.name && it.quantity > 0);
+
     const payload = {
       invoiceNo: formData.invoiceNo.trim(),
+      cuNumber: formData.cuNumber.trim(),
+      pin: formData.pin.trim(),
       partyType: formData.partyType,
       partyId: formData.partyId,
       partyName: selectedParty?.name || "",
       issueDate: formData.issueDate,
       dueDate: formData.dueDate,
+      items: sanitizedItems,
       subtotal,
       tax,
       total: computedTotal,
@@ -323,13 +403,30 @@ export default function Invoices() {
 
   const columns = useMemo(
     () => [
-      { key: "invoiceNo", header: "Invoice No" },
-      { key: "partyName", header: "Party" },
-      { key: "issueDate", header: "Issue Date" },
-      { key: "dueDate", header: "Due Date" },
+      { key: "invoiceNo", header: "System Invoice" },
+      {
+        key: "cuNumber",
+        header: "CU Number",
+        render: (i: InvoiceRecord) => <span className="font-medium">{i.cuNumber || "—"}</span>,
+      },
+      { key: "issueDate", header: "Date" },
+      { key: "partyName", header: "Customer" },
+      {
+        key: "pin",
+        header: "PIN",
+        render: (i: InvoiceRecord) => <span className="font-medium">{i.pin || "—"}</span>,
+      },
+      {
+        key: "items",
+        header: "Items",
+        render: (i: InvoiceRecord) => {
+          const label = (i.items || []).map((x) => `${x.name} (${x.quantity} ${x.unit})`).join(", ");
+          return <span className="text-sm text-muted-foreground">{label || "—"}</span>;
+        },
+      },
       {
         key: "total",
-        header: "Total",
+        header: "Total Amount",
         render: (i: InvoiceRecord) => <span className="font-medium">₹{(i.total || 0).toLocaleString("en-IN")}</span>,
       },
       { key: "status", header: "Status" },
@@ -438,8 +535,28 @@ export default function Invoices() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="invoiceNo">Invoice No</Label>
+                <Label htmlFor="invoiceNo">System Invoice</Label>
                 <Input id="invoiceNo" value={formData.invoiceNo} onChange={(e) => setFormData((s) => ({ ...s, invoiceNo: e.target.value }))} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cuNumber">CU Number</Label>
+                <Input
+                  id="cuNumber"
+                  value={(formData as any).cuNumber || ""}
+                  onChange={(e) => setFormData((s: any) => ({ ...s, cuNumber: e.target.value }))}
+                  placeholder="Optional"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pin">PIN</Label>
+                <Input
+                  id="pin"
+                  value={(formData as any).pin || ""}
+                  onChange={(e) => setFormData((s: any) => ({ ...s, pin: e.target.value }))}
+                  placeholder="Optional"
+                />
               </div>
 
               <div className="space-y-2">
@@ -498,9 +615,129 @@ export default function Invoices() {
                 <Input id="dueDate" type="date" value={formData.dueDate} onChange={(e) => setFormData((s) => ({ ...s, dueDate: e.target.value }))} />
               </div>
 
+              <div className="space-y-2 md:col-span-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Items (from Processed Inventory)</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setLineItems((prev) => [
+                        ...prev,
+                        { processedInventoryId: "", name: "", unit: "pcs", quantity: 1, rate: 0 },
+                      ])
+                    }
+                  >
+                    Add Item
+                  </Button>
+                </div>
+
+                {lineItems.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No items added. You can still enter subtotal manually.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {lineItems.map((it, idx) => {
+                      const amount = (Number(it.quantity) || 0) * (Number(it.rate) || 0);
+                      return (
+                        <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+                          <div className="md:col-span-5 space-y-1">
+                            <Label className="text-xs text-muted-foreground">Item</Label>
+                            <Select
+                              value={it.processedInventoryId}
+                              onValueChange={(v) => {
+                                const selected = processedInventoryOptions.find((o) => o.id === v);
+                                setLineItems((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx
+                                      ? {
+                                          ...x,
+                                          processedInventoryId: v,
+                                          name: selected?.name || x.name,
+                                          unit: selected?.unit || x.unit || "pcs",
+                                        }
+                                      : x
+                                  )
+                                );
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select processed item" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {processedInventoryOptions.map((o) => (
+                                  <SelectItem key={o.id} value={o.id}>
+                                    {o.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="md:col-span-2 space-y-1">
+                            <Label className="text-xs text-muted-foreground">Qty</Label>
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              value={String(it.quantity)}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value);
+                                setLineItems((prev) => prev.map((x, i) => (i === idx ? { ...x, quantity: Number.isFinite(v) ? v : 0 } : x)));
+                              }}
+                            />
+                          </div>
+
+                          <div className="md:col-span-1 space-y-1">
+                            <Label className="text-xs text-muted-foreground">Unit</Label>
+                            <Input value={it.unit} readOnly />
+                          </div>
+
+                          <div className="md:col-span-2 space-y-1">
+                            <Label className="text-xs text-muted-foreground">Rate</Label>
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              value={String(it.rate)}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value);
+                                setLineItems((prev) => prev.map((x, i) => (i === idx ? { ...x, rate: Number.isFinite(v) ? v : 0 } : x)));
+                              }}
+                            />
+                          </div>
+
+                          <div className="md:col-span-1 space-y-1">
+                            <Label className="text-xs text-muted-foreground">Amt</Label>
+                            <Input value={amount.toFixed(2)} readOnly />
+                          </div>
+
+                          <div className="md:col-span-1">
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => setLineItems((prev) => prev.filter((_, i) => i !== idx))}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="subtotal">Subtotal</Label>
-                <Input id="subtotal" type="number" inputMode="decimal" value={formData.subtotal} onChange={(e) => setFormData((s) => ({ ...s, subtotal: e.target.value }))} placeholder="0" />
+                <Input
+                  id="subtotal"
+                  type="number"
+                  inputMode="decimal"
+                  value={computedSubtotal.toString()}
+                  onChange={(e) => setFormData((s) => ({ ...s, subtotal: e.target.value }))}
+                  placeholder="0"
+                  readOnly={lineItems.length > 0}
+                />
               </div>
 
               <div className="space-y-2">

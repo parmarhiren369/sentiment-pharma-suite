@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { addDoc, collection, getDocs, Timestamp } from "firebase/firestore";
+import { collection, doc, getDocs, Timestamp, writeBatch } from "firebase/firestore";
 import { ArrowLeft, FilePlus } from "lucide-react";
 
 type NoteType = "Debit" | "Credit";
@@ -28,6 +28,13 @@ function generateNoteNo(noteType: NoteType, date: string, suffix: string): strin
   const prefix = noteType === "Credit" ? "CN" : "DN";
   const ymd = (date || new Date().toISOString().slice(0, 10)).replace(/-/g, "");
   return `${prefix}-${ymd}-${suffix}`;
+}
+
+function noteToTransactionType(noteType: NoteType): "Income" | "Expense" {
+  // App-wide simplification:
+  // - Debit note increases amount to receive -> Income
+  // - Credit note decreases amount to receive -> Expense
+  return noteType === "Debit" ? "Income" : "Expense";
 }
 
 export default function DebitCreditNoteNew() {
@@ -128,19 +135,48 @@ export default function DebitCreditNoteNew() {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "debitCreditNotes"), {
+      const batch = writeBatch(db);
+      const notesRef = collection(db, "debitCreditNotes");
+      const txRef = collection(db, "transactions");
+
+      const noteDoc = doc(notesRef);
+      const transactionDoc = doc(txRef);
+
+      const trimmedRelatedInvoiceNo = relatedInvoiceNo.trim();
+      const partyName = selectedParty?.name || "";
+
+      batch.set(noteDoc, {
         noteType,
         noteNo,
         date,
         partyType,
         partyId,
-        partyName: selectedParty?.name || "",
+        partyName,
         amount: numericAmount,
-        relatedInvoiceNo: relatedInvoiceNo.trim(),
+        relatedInvoiceNo: trimmedRelatedInvoiceNo,
         reason: reason.trim(),
+        transactionId: transactionDoc.id,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
+
+      batch.set(transactionDoc, {
+        date,
+        description: `${noteType} Note ${noteNo}`,
+        category: noteType === "Debit" ? "Debit Note" : "Credit Note",
+        amount: numericAmount,
+        type: noteToTransactionType(noteType),
+        status: "Completed",
+        reference: trimmedRelatedInvoiceNo || noteNo,
+        partyType,
+        partyId,
+        partyName,
+        notes: reason.trim(),
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+
+      await batch.commit();
 
       toast({ title: "Saved", description: "Note saved to Firestore." });
       navigate("/debit-credit-notes");

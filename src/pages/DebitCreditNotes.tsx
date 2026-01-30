@@ -39,6 +39,7 @@ interface NoteRecord {
   amount: number;
   relatedInvoiceNo: string;
   reason: string;
+  transactionId?: string;
   createdAt?: Date;
 }
 
@@ -61,6 +62,10 @@ const defaultFormState = {
 function safeNumber(value: string): number {
   const n = parseFloat(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+function noteToTransactionType(noteType: NoteType): "Income" | "Expense" {
+  return noteType === "Debit" ? "Income" : "Expense";
 }
 
 export default function DebitCreditNotes() {
@@ -149,6 +154,7 @@ export default function DebitCreditNotes() {
         amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
         relatedInvoiceNo: (data.relatedInvoiceNo || "").toString(),
         reason: (data.reason || "").toString(),
+        transactionId: (data.transactionId || "").toString() || undefined,
         createdAt: data.createdAt?.toDate?.() || new Date(),
       } as NoteRecord;
     });
@@ -211,8 +217,14 @@ export default function DebitCreditNotes() {
     if (!db) return;
     if (!confirm("Delete this note?")) return;
 
+    const note = notes.find((n) => n.id === id);
+
     try {
       await deleteDoc(doc(db, "debitCreditNotes", id));
+
+      if (note?.transactionId) {
+        await deleteDoc(doc(db, "transactions", note.transactionId));
+      }
       toast({ title: "Deleted", description: "Note removed." });
       fetchNotes();
     } catch (error) {
@@ -283,6 +295,23 @@ export default function DebitCreditNotes() {
     try {
       if (editing) {
         await updateDoc(doc(db, "debitCreditNotes", editing.id), payload);
+
+        if (editing.transactionId) {
+          await updateDoc(doc(db, "transactions", editing.transactionId), {
+            date: payload.date,
+            description: `${payload.noteType} Note ${payload.noteNo}`,
+            category: payload.noteType === "Debit" ? "Debit Note" : "Credit Note",
+            amount: payload.amount,
+            type: noteToTransactionType(payload.noteType),
+            status: "Completed",
+            reference: payload.relatedInvoiceNo || payload.noteNo,
+            partyType: payload.partyType,
+            partyId: payload.partyId,
+            partyName: payload.partyName,
+            notes: payload.reason,
+            updatedAt: Timestamp.now(),
+          });
+        }
         toast({ title: "Updated", description: "Note updated." });
       } else {
         await addDoc(collection(db, "debitCreditNotes"), {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
@@ -85,6 +86,7 @@ function safeNumber(value: string): number {
 }
 
 export default function Invoices() {
+  const navigate = useNavigate();
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [customers, setCustomers] = useState<PartyOption[]>([]);
   const [suppliers, setSuppliers] = useState<PartyOption[]>([]);
@@ -287,11 +289,6 @@ export default function Invoices() {
     setLineItems([]);
   };
 
-  const openAdd = () => {
-    resetForm();
-    setIsDialogOpen(true);
-  };
-
   const openEdit = (row: InvoiceRecord) => {
     setEditing(row);
     setFormData({
@@ -331,6 +328,14 @@ export default function Invoices() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!editing) {
+      toast({
+        title: "Create invoice",
+        description: "Use Add Invoice to open the full-page create form.",
+      });
+      return;
+    }
 
     if (!db) {
       toast({
@@ -531,7 +536,7 @@ export default function Invoices() {
 
             <div className="flex items-center gap-2">
               <ExportExcelButton rows={exportRows} fileName="invoices" sheetName="Invoices" label="Export" variant="outline" />
-              <Button className="gap-2" onClick={openAdd}>
+              <Button className="gap-2" onClick={() => navigate("/invoices/new")}>
                 <Plus className="w-4 h-4" />
                 Add Invoice
               </Button>
@@ -549,7 +554,7 @@ export default function Invoices() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Invoice" : "Add Invoice"}</DialogTitle>
+            <DialogTitle>Edit Invoice</DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -788,7 +793,7 @@ export default function Invoices() {
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : editing ? "Update" : "Save"}
+                {isSubmitting ? "Saving..." : "Update"}
               </Button>
             </DialogFooter>
           </form>

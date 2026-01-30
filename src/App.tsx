@@ -24,6 +24,7 @@ import Purchases from "./pages/Purchases";
 import Transactions from "./pages/Transactions";
 import Payments from "./pages/Payments";
 import Invoices from "./pages/Invoices";
+import InvoiceNew from "./pages/InvoiceNew";
 import DebitCreditNotes from "./pages/DebitCreditNotes";
 import DebitCreditNoteNew from "./pages/DebitCreditNoteNew";
 import { Suspense } from "react";
@@ -74,6 +75,7 @@ const App = () => {
                   <Route path="/transactions" element={<Transactions />} />
                   <Route path="/payments" element={<Payments />} />
                   <Route path="/invoices" element={<Invoices />} />
+                  <Route path="/invoices/new" element={<InvoiceNew />} />
                   <Route path="/debit-credit-notes" element={<DebitCreditNotes />} />
                   <Route path="/debit-credit-notes/new" element={<DebitCreditNoteNew />} />
                   <Route path="/doctors" element={<Doctors />} />

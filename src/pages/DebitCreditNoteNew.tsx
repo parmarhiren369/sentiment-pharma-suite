@@ -10,38 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { addDoc, collection, getDocs, Timestamp } from "firebase/firestore";
-import { ArrowLeft, FileMinus, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, FilePlus } from "lucide-react";
+
+type NoteType = "Debit" | "Credit";
 
 interface PartyOption {
   id: string;
   name: string;
-}
-
-interface InvoiceLineItem {
-  processedInventoryId: string;
-  name: string;
-  unit: string;
-  quantity: number;
-  rate: number;
-}
-
-interface InvoiceRecord {
-  id: string;
-  invoiceNo: string;
-  partyType: "customer" | "supplier";
-  partyId: string;
-  partyName: string;
-  issueDate: string;
-  items: InvoiceLineItem[];
-}
-
-interface ReturnRow {
-  rowId: string;
-  processedInventoryId: string;
-  description: string;
-  invoiceQty: number;
-  returnQty: string;
-  rate: string;
 }
 
 function safeNumber(value: string): number {
@@ -49,8 +24,10 @@ function safeNumber(value: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function uid(): string {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+function generateNoteNo(noteType: NoteType, date: string, suffix: string): string {
+  const prefix = noteType === "Credit" ? "CN" : "DN";
+  const ymd = (date || new Date().toISOString().slice(0, 10)).replace(/-/g, "");
+  return `${prefix}-${ymd}-${suffix}`;
 }
 
 export default function DebitCreditNoteNew() {
@@ -58,43 +35,25 @@ export default function DebitCreditNoteNew() {
   const { toast } = useToast();
 
   const [customers, setCustomers] = useState<PartyOption[]>([]);
-  const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
+  const [suppliers, setSuppliers] = useState<PartyOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [noteNo, setNoteNo] = useState("");
+  const [noteType, setNoteType] = useState<NoteType>("Debit");
+  const [noteNoSuffix] = useState(() => Math.random().toString(36).slice(2, 6).toUpperCase());
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [customerId, setCustomerId] = useState("");
-  const [invoiceId, setInvoiceId] = useState("");
+  const [partyType, setPartyType] = useState<"customer" | "supplier">("customer");
+  const [partyId, setPartyId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [relatedInvoiceNo, setRelatedInvoiceNo] = useState("");
   const [reason, setReason] = useState("");
 
-  const [rows, setRows] = useState<ReturnRow[]>([{ rowId: uid(), processedInventoryId: "", description: "", invoiceQty: 0, returnQty: "", rate: "" }]);
+  const noteNo = useMemo(() => generateNoteNo(noteType, date, noteNoSuffix), [date, noteNoSuffix, noteType]);
 
-  const customerName = useMemo(() => customers.find((c) => c.id === customerId)?.name || "", [customers, customerId]);
+  const partyOptions = useMemo(() => (partyType === "supplier" ? suppliers : customers), [customers, suppliers, partyType]);
+  const selectedParty = useMemo(() => partyOptions.find((p) => p.id === partyId) || null, [partyOptions, partyId]);
 
-  const customerInvoices = useMemo(() => {
-    if (!customerId) return [];
-    return invoices
-      .filter((i) => i.partyType === "customer" && i.partyId === customerId)
-      .sort((a, b) => (b.issueDate || "").localeCompare(a.issueDate || ""));
-  }, [invoices, customerId]);
-
-  const selectedInvoice = useMemo(() => customerInvoices.find((i) => i.id === invoiceId) || null, [customerInvoices, invoiceId]);
-
-  const invoiceItemOptions = useMemo(() => {
-    const items = selectedInvoice?.items || [];
-    return items.filter((it) => it.name);
-  }, [selectedInvoice]);
-
-  const subtotal = useMemo(() => {
-    return rows.reduce((sum, r) => {
-      const qty = safeNumber(r.returnQty);
-      const rate = safeNumber(r.rate);
-      return sum + Math.max(0, qty) * Math.max(0, rate);
-    }, 0);
-  }, [rows]);
-
-  const fetchAll = async () => {
+  const fetchParties = async () => {
     if (!db) {
       toast({
         title: "Database unavailable",
@@ -106,9 +65,9 @@ export default function DebitCreditNoteNew() {
 
     setIsLoading(true);
     try {
-      const [customersSnap, invoicesSnap] = await Promise.all([
+      const [customersSnap, suppliersSnap] = await Promise.all([
         getDocs(collection(db, "customers")),
-        getDocs(collection(db, "invoices")),
+        getDocs(collection(db, "suppliers")),
       ]);
 
       const customersList = customersSnap.docs
@@ -116,113 +75,28 @@ export default function DebitCreditNoteNew() {
         .filter((x) => x.name)
         .sort((a, b) => a.name.localeCompare(b.name));
 
-      const invoicesList = invoicesSnap.docs
-        .map((d) => {
-          const data = d.data() as Record<string, unknown>;
-          const maybeItems = (data.items ?? []) as unknown;
-          const rawItems: unknown[] = Array.isArray(maybeItems) ? maybeItems : [];
-          const items: InvoiceLineItem[] = rawItems
-            .map((it: unknown) => {
-              const obj: Record<string, unknown> = typeof it === "object" && it !== null ? (it as Record<string, unknown>) : {};
-
-              const rawQty = obj.quantity;
-              const rawRate = obj.rate;
-
-              const quantity = typeof rawQty === "number" ? rawQty : parseFloat(String(rawQty ?? "0")) || 0;
-              const rate = typeof rawRate === "number" ? rawRate : parseFloat(String(rawRate ?? "0")) || 0;
-              return {
-                processedInventoryId: String(obj.processedInventoryId ?? ""),
-                name: String(obj.name ?? ""),
-                unit: String(obj.unit ?? "") || "pcs",
-                quantity,
-                rate,
-              } as InvoiceLineItem;
-            })
-            .filter((it: InvoiceLineItem) => it.name);
-
-          return {
-            id: d.id,
-            invoiceNo: String(data.invoiceNo ?? ""),
-            partyType: (data.partyType || "customer") as InvoiceRecord["partyType"],
-            partyId: String(data.partyId ?? ""),
-            partyName: String(data.partyName ?? ""),
-            issueDate: String(data.issueDate ?? ""),
-            items,
-          } as InvoiceRecord;
-        })
-        .filter((i) => i.invoiceNo && i.partyType === "customer");
+      const suppliersList = suppliersSnap.docs
+        .map((d) => ({ id: d.id, name: (d.data().name || "").toString() }))
+        .filter((x) => x.name)
+        .sort((a, b) => a.name.localeCompare(b.name));
 
       setCustomers(customersList);
-      setInvoices(invoicesList);
+      setSuppliers(suppliersList);
     } catch (error) {
-      console.error("Error loading customers/invoices", error);
-      toast({
-        title: "Load failed",
-        description: "Could not load customers or invoices.",
-        variant: "destructive",
-      });
+      console.error("Error loading parties", error);
+      toast({ title: "Load failed", description: "Could not load customers/suppliers.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAll();
+    fetchParties();
   }, []);
 
   useEffect(() => {
-    // Reset invoice + rows when customer changes
-    setInvoiceId("");
-    setRows([{ rowId: uid(), processedInventoryId: "", description: "", invoiceQty: 0, returnQty: "", rate: "" }]);
-  }, [customerId]);
-
-  useEffect(() => {
-    // When invoice selected, pre-fill rows with invoice items
-    if (!selectedInvoice) {
-      setRows([{ rowId: uid(), processedInventoryId: "", description: "", invoiceQty: 0, returnQty: "", rate: "" }]);
-      return;
-    }
-
-    const next = (selectedInvoice.items || []).map((it) => ({
-      rowId: uid(),
-      processedInventoryId: it.processedInventoryId || it.name,
-      description: it.name,
-      invoiceQty: it.quantity,
-      returnQty: "",
-      rate: (it.rate || 0).toString(),
-    }));
-
-    setRows(next.length ? next : [{ rowId: uid(), processedInventoryId: "", description: "", invoiceQty: 0, returnQty: "", rate: "" }]);
-  }, [selectedInvoice?.id]);
-
-  const addRow = () => {
-    setRows((prev) => [...prev, { rowId: uid(), processedInventoryId: "", description: "", invoiceQty: 0, returnQty: "", rate: "" }]);
-  };
-
-  const removeRow = (rowId: string) => {
-    setRows((prev) => {
-      const next = prev.filter((r) => r.rowId !== rowId);
-      return next.length ? next : [{ rowId: uid(), processedInventoryId: "", description: "", invoiceQty: 0, returnQty: "", rate: "" }];
-    });
-  };
-
-  const updateRow = (rowId: string, patch: Partial<ReturnRow>) => {
-    setRows((prev) => prev.map((r) => (r.rowId === rowId ? { ...r, ...patch } : r)));
-  };
-
-  const onSelectItem = (rowId: string, value: string) => {
-    const item = invoiceItemOptions.find((it) => (it.processedInventoryId || it.name) === value);
-    if (!item) {
-      updateRow(rowId, { processedInventoryId: value });
-      return;
-    }
-    updateRow(rowId, {
-      processedInventoryId: item.processedInventoryId || item.name,
-      description: item.name,
-      invoiceQty: item.quantity,
-      rate: (item.rate || 0).toString(),
-    });
-  };
+    setPartyId("");
+  }, [partyType]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -236,18 +110,14 @@ export default function DebitCreditNoteNew() {
       return;
     }
 
-    if (!noteNo.trim()) {
-      toast({ title: "Validation error", description: "Credit note number is required.", variant: "destructive" });
+    if (!partyId) {
+      toast({ title: "Validation error", description: "Select a party.", variant: "destructive" });
       return;
     }
 
-    if (!customerId) {
-      toast({ title: "Validation error", description: "Select customer.", variant: "destructive" });
-      return;
-    }
-
-    if (!selectedInvoice) {
-      toast({ title: "Validation error", description: "Select original sales invoice.", variant: "destructive" });
+    const numericAmount = safeNumber(amount);
+    if (numericAmount <= 0) {
+      toast({ title: "Validation error", description: "Amount must be greater than zero.", variant: "destructive" });
       return;
     }
 
@@ -256,63 +126,27 @@ export default function DebitCreditNoteNew() {
       return;
     }
 
-    const normalizedItems = rows
-      .map((r) => {
-        const returnQty = safeNumber(r.returnQty);
-        const rate = safeNumber(r.rate);
-        const invoiceQty = Number(r.invoiceQty) || 0;
-        const cappedQty = Math.max(0, Math.min(returnQty, invoiceQty));
-        return {
-          processedInventoryId: (r.processedInventoryId || "").toString(),
-          description: (r.description || "").toString(),
-          invoiceQty,
-          returnQty: cappedQty,
-          rate: Math.max(0, rate),
-          amount: cappedQty * Math.max(0, rate),
-        };
-      })
-      .filter((it) => it.returnQty > 0);
-
-    if (!normalizedItems.length) {
-      toast({ title: "Validation error", description: "Add at least one returned item with Return Qty > 0.", variant: "destructive" });
-      return;
-    }
-
-    // Warn (but don’t block) if user entered Return Qty > Invoice Qty; we already cap.
-    const hasOver = rows.some((r) => safeNumber(r.returnQty) > (Number(r.invoiceQty) || 0) && (Number(r.invoiceQty) || 0) > 0);
-    if (hasOver) {
-      toast({
-        title: "Adjusted quantities",
-        description: "Some Return Qty exceeded Invoice Qty and was capped.",
-      });
-    }
-
-    const amount = normalizedItems.reduce((sum, it) => sum + (it.amount || 0), 0);
-
     setIsSubmitting(true);
     try {
       await addDoc(collection(db, "debitCreditNotes"), {
-        noteType: "Credit",
-        noteNo: noteNo.trim(),
+        noteType,
+        noteNo,
         date,
-        partyType: "customer",
-        partyId: customerId,
-        partyName: customerName,
-        amount,
-        relatedInvoiceNo: selectedInvoice.invoiceNo,
-        relatedInvoiceId: selectedInvoice.id,
-        originalTransactionType: "Sale",
+        partyType,
+        partyId,
+        partyName: selectedParty?.name || "",
+        amount: numericAmount,
+        relatedInvoiceNo: relatedInvoiceNo.trim(),
         reason: reason.trim(),
-        items: normalizedItems,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
 
-      toast({ title: "Saved", description: "Credit note saved." });
+      toast({ title: "Saved", description: "Note saved to Firestore." });
       navigate("/debit-credit-notes");
     } catch (error) {
-      console.error("Error saving credit note", error);
-      toast({ title: "Save failed", description: "Could not save credit note.", variant: "destructive" });
+      console.error("Error saving note", error);
+      toast({ title: "Save failed", description: "Could not save note.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -320,25 +154,21 @@ export default function DebitCreditNoteNew() {
 
   return (
     <>
-      <AppHeader title="Credit Note" subtitle="Customer Return" />
+      <AppHeader title="New Debit / Credit Note" subtitle="Create a new note" />
 
       <div className="flex-1 overflow-auto p-6">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-success/15 flex items-center justify-center">
-              <FileMinus className="w-5 h-5 text-success" />
+            <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center">
+              <FilePlus className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <div className="text-lg font-semibold">CREDIT NOTE - Customer Return</div>
-              <div className="text-sm text-muted-foreground">
-                Customer returns sold items: adds stock back, reduces Amount to Receive, and creates a credit entry.
-              </div>
+              <div className="text-lg font-semibold">Create New Debit/Credit Note</div>
+              <div className="text-sm text-muted-foreground">All fields will be stored in Firestore.</div>
             </div>
           </div>
 
-          <Button variant="outline" className="gap-2" onClick={() => navigate("/debit-credit-notes")}
-            disabled={isSubmitting}
-          >
+          <Button variant="outline" className="gap-2" onClick={() => navigate("/debit-credit-notes")} disabled={isSubmitting}>
             <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
@@ -349,33 +179,21 @@ export default function DebitCreditNoteNew() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Note Type</Label>
-                <Select value="credit-return" onValueChange={() => {}} disabled>
+                <Select value={noteType} onValueChange={(v) => setNoteType(v as NoteType)}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Credit Note (Return from Customer)" />
+                    <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="credit-return">Credit Note (Return from Customer)</SelectItem>
+                    <SelectItem value="Debit">Debit Note</SelectItem>
+                    <SelectItem value="Credit">Credit Note</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Customer returns sold items - Adds stock back, reduces Amount to Receive</p>
               </div>
 
               <div className="space-y-2">
-                <Label>Original Transaction Type</Label>
-                <Select value="sale" onValueChange={() => {}} disabled>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sale (Customer Invoice)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sale">Sale (Customer Invoice)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Linked to original sales invoice</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="noteNo">Credit Note No *</Label>
-                <Input id="noteNo" value={noteNo} onChange={(e) => setNoteNo(e.target.value)} placeholder="e.g., CN-0001" />
+                <Label>Note No (Auto)</Label>
+                <Input value={noteNo} readOnly />
+                <p className="text-xs text-muted-foreground">Generated automatically based on Type + Date.</p>
               </div>
 
               <div className="space-y-2">
@@ -384,15 +202,28 @@ export default function DebitCreditNoteNew() {
               </div>
 
               <div className="space-y-2">
-                <Label>Customer Name (returning goods to us) *</Label>
-                <Select value={customerId} onValueChange={setCustomerId}>
+                <Label>Party Type</Label>
+                <Select value={partyType} onValueChange={(v) => setPartyType(v as "customer" | "supplier")}>
                   <SelectTrigger>
-                    <SelectValue placeholder={isLoading ? "Loading customers..." : "Select Customer"} />
+                    <SelectValue placeholder="Select party type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {customers.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
+                    <SelectItem value="customer">Customer</SelectItem>
+                    <SelectItem value="supplier">Supplier</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Party *</Label>
+                <Select value={partyId} onValueChange={setPartyId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={isLoading ? "Loading..." : partyType === "customer" ? "Select customer" : "Select supplier"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {partyOptions.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -400,136 +231,21 @@ export default function DebitCreditNoteNew() {
               </div>
 
               <div className="space-y-2">
-                <Label>Original Sales Invoice Number *</Label>
-                <Select value={invoiceId} onValueChange={setInvoiceId} disabled={!customerId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={!customerId ? "Select party first" : "Select Sales Invoice"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customerInvoices.map((inv) => (
-                      <SelectItem key={inv.id} value={inv.id}>
-                        {inv.invoiceNo} ({inv.issueDate || "—"})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="amount">Amount *</Label>
+                <Input id="amount" type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+              </div>
+
+              <div className="space-y-2 lg:col-span-3">
+                <Label htmlFor="relatedInvoiceNo">Related Invoice No</Label>
+                <Input id="relatedInvoiceNo" value={relatedInvoiceNo} onChange={(e) => setRelatedInvoiceNo(e.target.value)} placeholder="Optional" />
               </div>
             </div>
           </Card>
 
           <Card className="p-4">
             <div className="space-y-2">
-              <Label htmlFor="reason">Reason for Customer Return</Label>
-              <Textarea
-                id="reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="e.g., Customer returned damaged goods, wrong items delivered, quality issues, etc."
-              />
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <div className="font-semibold">Items Being Returned (from customer)</div>
-                <div className="text-sm text-muted-foreground">Add items and enter Return Qty (Amount auto-calculates)</div>
-              </div>
-              <Button type="button" variant="outline" className="gap-2" onClick={addRow} disabled={!selectedInvoice}>
-                <Plus className="w-4 h-4" />
-                Add Item
-              </Button>
-            </div>
-
-            <div className="overflow-x-auto border border-border rounded-lg">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Item Code</th>
-                    <th className="p-3">Description</th>
-                    <th className="p-3">Invoice Qty</th>
-                    <th className="p-3">Return Qty</th>
-                    <th className="p-3">Rate</th>
-                    <th className="p-3">Amount</th>
-                    <th className="p-3 w-12"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => {
-                    const amount = Math.max(0, safeNumber(r.returnQty)) * Math.max(0, safeNumber(r.rate));
-                    const returnQtyNum = safeNumber(r.returnQty);
-                    const invoiceQtyNum = Number(r.invoiceQty) || 0;
-                    const isOver = invoiceQtyNum > 0 && returnQtyNum > invoiceQtyNum;
-
-                    return (
-                      <tr key={r.rowId} className="border-t border-border align-top">
-                        <td className="p-3 min-w-[220px]">
-                          <Select
-                            value={r.processedInventoryId}
-                            onValueChange={(v) => onSelectItem(r.rowId, v)}
-                            disabled={!selectedInvoice}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={!selectedInvoice ? "Select Sales Invoice" : "Select Item"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {invoiceItemOptions.map((it) => {
-                                const key = it.processedInventoryId || it.name;
-                                return (
-                                  <SelectItem key={key} value={key}>
-                                    {it.name} ({it.quantity} {it.unit})
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="p-3 min-w-[260px]">
-                          <Input value={r.description} readOnly placeholder="Item description (auto-filled)" />
-                        </td>
-                        <td className="p-3 min-w-[120px]">
-                          <Input value={r.invoiceQty ? String(r.invoiceQty) : ""} readOnly placeholder="-" />
-                        </td>
-                        <td className="p-3 min-w-[140px]">
-                          <Input
-                            type="number"
-                            inputMode="decimal"
-                            value={r.returnQty}
-                            onChange={(e) => updateRow(r.rowId, { returnQty: e.target.value })}
-                            placeholder="Qty"
-                            className={isOver ? "border-destructive" : ""}
-                          />
-                          {isOver ? <div className="text-xs text-destructive mt-1">Return Qty exceeds invoice qty</div> : null}
-                        </td>
-                        <td className="p-3 min-w-[140px]">
-                          <Input
-                            type="number"
-                            inputMode="decimal"
-                            value={r.rate}
-                            onChange={(e) => updateRow(r.rowId, { rate: e.target.value })}
-                            placeholder="Rate"
-                          />
-                        </td>
-                        <td className="p-3 min-w-[140px]">
-                          <Input value={amount ? amount.toFixed(2) : ""} readOnly placeholder="0" />
-                        </td>
-                        <td className="p-3">
-                          <Button type="button" variant="ghost" size="sm" onClick={() => removeRow(r.rowId)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex items-center justify-end mt-3">
-              <div className="text-right">
-                <div className="text-sm text-muted-foreground">Subtotal</div>
-                <div className="text-lg font-semibold">₹{subtotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
-              </div>
+              <Label htmlFor="reason">Reason *</Label>
+              <Textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Explain why this note is issued" />
             </div>
           </Card>
 
@@ -538,7 +254,7 @@ export default function DebitCreditNoteNew() {
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving..." : "Save Credit Note"}
+              {isSubmitting ? "Saving..." : "Save Note"}
             </Button>
           </div>
         </form>

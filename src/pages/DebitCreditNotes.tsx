@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { DataTable } from "@/components/tables/DataTable";
@@ -63,6 +64,7 @@ function safeNumber(value: string): number {
 }
 
 export default function DebitCreditNotes() {
+  const navigate = useNavigate();
   const [notes, setNotes] = useState<NoteRecord[]>([]);
   const [customers, setCustomers] = useState<PartyOption[]>([]);
   const [suppliers, setSuppliers] = useState<PartyOption[]>([]);
@@ -190,11 +192,6 @@ export default function DebitCreditNotes() {
     });
   };
 
-  const openAdd = () => {
-    resetForm();
-    setIsDialogOpen(true);
-  };
-
   const openEdit = (row: NoteRecord) => {
     setEditing(row);
     setFormData({
@@ -230,6 +227,14 @@ export default function DebitCreditNotes() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!editing) {
+      toast({
+        title: "Create note",
+        description: "Use Add Note to open the full-page create form.",
+      });
+      return;
+    }
 
     if (!db) {
       toast({
@@ -404,7 +409,7 @@ export default function DebitCreditNotes() {
 
             <div className="flex items-center gap-2">
               <ExportExcelButton rows={exportRows} fileName="debit-credit-notes" sheetName="Notes" label="Export" variant="outline" />
-              <Button className="gap-2" onClick={openAdd}>
+              <Button className="gap-2" onClick={() => navigate("/debit-credit-notes/new")}>
                 <Plus className="w-4 h-4" />
                 Add Note
               </Button>
@@ -422,7 +427,7 @@ export default function DebitCreditNotes() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Note" : "Add Note"}</DialogTitle>
+            <DialogTitle>Edit Note</DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -512,7 +517,7 @@ export default function DebitCreditNotes() {
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : editing ? "Update" : "Save"}
+                {isSubmitting ? "Saving..." : "Update"}
               </Button>
             </DialogFooter>
           </form>

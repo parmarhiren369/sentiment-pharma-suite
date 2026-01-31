@@ -298,42 +298,46 @@ export default function InvoicePrint() {
             </table>
           </div>
 
-          <div className="mt-10 border border-black p-2">
-            <div className="text-xs font-bold uppercase text-left">TAX SUMMARY</div>
-            <div className="mt-2">
-              <table className="w-full border-collapse border border-black text-[11px]">
-                <thead>
-                  <tr>
-                    <th className="border border-black px-2 py-1 text-left font-bold">Tax Rate</th>
-                    <th className="border border-black px-2 py-1 text-right font-bold">Taxable Amt</th>
-                    <th className="border border-black px-2 py-1 text-right font-bold">Tax Amt</th>
-                    <th className="border border-black px-2 py-1 text-right font-bold">Total Amt</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {taxSummaryRows.map((r, idx) => (
-                    <tr key={idx}>
-                      <td className="border border-black px-2 py-1">{r.rate}</td>
-                      <td className="border border-black px-2 py-1 text-right">{formatMoney(r.taxable)}</td>
-                      <td className="border border-black px-2 py-1 text-right">{formatMoney(r.tax)}</td>
-                      <td className="border border-black px-2 py-1 text-right">{formatMoney(r.total)}</td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <td className="border border-black px-2 py-1 font-bold">Totals</td>
-                    <td className="border border-black px-2 py-1 text-right font-bold">{formatMoney(subtotal)}</td>
-                    <td className="border border-black px-2 py-1 text-right font-bold">{formatMoney(taxAmount)}</td>
-                    <td className="border border-black px-2 py-1 text-right font-bold">{formatMoney(total)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <div className="mt-6 flex flex-col min-h-[55vh]">
+            <div className="mt-auto">
+              <div className="border border-black p-2">
+                <div className="text-xs font-bold uppercase text-left">TAX SUMMARY</div>
+                <div className="mt-2">
+                  <table className="w-full border-collapse border border-black text-[11px]">
+                    <thead>
+                      <tr>
+                        <th className="border border-black px-2 py-1 text-left font-bold">Tax Rate</th>
+                        <th className="border border-black px-2 py-1 text-right font-bold">Taxable Amt</th>
+                        <th className="border border-black px-2 py-1 text-right font-bold">Tax Amt</th>
+                        <th className="border border-black px-2 py-1 text-right font-bold">Total Amt</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {taxSummaryRows.map((r, idx) => (
+                        <tr key={idx}>
+                          <td className="border border-black px-2 py-1">{r.rate}</td>
+                          <td className="border border-black px-2 py-1 text-right">{formatMoney(r.taxable)}</td>
+                          <td className="border border-black px-2 py-1 text-right">{formatMoney(r.tax)}</td>
+                          <td className="border border-black px-2 py-1 text-right">{formatMoney(r.total)}</td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td className="border border-black px-2 py-1 font-bold">Totals</td>
+                        <td className="border border-black px-2 py-1 text-right font-bold">{formatMoney(subtotal)}</td>
+                        <td className="border border-black px-2 py-1 text-right font-bold">{formatMoney(taxAmount)}</td>
+                        <td className="border border-black px-2 py-1 text-right font-bold">{formatMoney(total)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
-          <Separator className="my-4 bg-black" />
-          <div className="text-xs space-y-1">
-            <div>This invoice was generated on {formatDateTimeWithSeconds(printedAt)}</div>
-            <div>{SYSTEM_NAME}</div>
+              <Separator className="my-4 bg-black" />
+              <div className="text-xs space-y-1">
+                <div>This invoice was generated on {formatDateTimeWithSeconds(printedAt)}</div>
+                <div>{SYSTEM_NAME}</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

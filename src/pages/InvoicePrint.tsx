@@ -203,7 +203,7 @@ export default function InvoicePrint() {
             <div className="text-2xl font-bold">{COMPANY_NAME}</div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="mt-4 grid grid-cols-3 gap-3">
             <div className="border border-black p-3 text-sm">
               <div className="text-xs font-bold uppercase">Invoice From</div>
               <div className="mt-2 space-y-1">

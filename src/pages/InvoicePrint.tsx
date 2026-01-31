@@ -10,6 +10,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { ArrowLeft, Printer } from "lucide-react";
 
 const COMPANY_NAME = "Sentiment Pharma";
+const COMPANY_SUBTITLE = "Invoice Summary";
 
 type InvoiceLineItem = {
   processedInventoryId?: string;
@@ -67,6 +68,12 @@ export default function InvoicePrint() {
     const pct = typeof invoice?.taxPercent === "number" ? invoice.taxPercent : 0;
     return (subtotal * pct) / 100;
   }, [invoice?.tax, invoice?.taxPercent, subtotal]);
+
+  const taxPercentLabel = useMemo(() => {
+    const pct = typeof invoice?.taxPercent === "number" ? invoice.taxPercent : undefined;
+    if (typeof pct === "number" && Number.isFinite(pct)) return `${pct}%`;
+    return undefined;
+  }, [invoice?.taxPercent]);
 
   const total = useMemo(() => {
     if (typeof invoice?.total === "number") return invoice.total;
@@ -138,8 +145,8 @@ export default function InvoicePrint() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-muted/30 p-6 print:bg-white print:p-0 print:text-black">
+      <div className="max-w-4xl mx-auto print:max-w-none print:mx-0 print:p-6">
         <div className="flex items-center justify-between gap-2 mb-4 print:hidden">
           <Button variant="outline" className="gap-2" onClick={() => navigate("/invoices")}
           >
@@ -152,118 +159,132 @@ export default function InvoicePrint() {
           </Button>
         </div>
 
-        <Card className="p-6">
-          <div className="text-center">
-            <div className="text-2xl font-extrabold tracking-wide">{COMPANY_NAME}</div>
-            <div className="text-sm font-semibold">INVOICE</div>
-          </div>
+        <Card className="p-8 shadow-lg border border-border/60 rounded-2xl print:shadow-none print:border-0 print:rounded-none print:p-0">
+          <div className="print:p-0">
+            <div className="text-center">
+              <div className="text-3xl font-extrabold tracking-wide leading-tight">{COMPANY_NAME}</div>
+              <div className="mt-1 text-xs uppercase tracking-[0.2em] text-muted-foreground print:text-black/70">{COMPANY_SUBTITLE}</div>
+            </div>
 
-          <Separator className="my-4" />
+            <Separator className="my-6" />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div>
-                <div className="text-xs text-muted-foreground">Bill To</div>
-                <div className="text-base font-semibold">{invoice.partyName || "—"}</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-lg border border-border/60 bg-white/60 p-4 print:bg-transparent">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground print:text-black/70">Bill To</div>
+                <div className="mt-1 text-base font-semibold">{invoice.partyName || "—"}</div>
+
+                <div className="mt-3 grid grid-cols-1 gap-1 text-sm">
+                  <div>
+                    <span className="text-muted-foreground print:text-black/70">GST:</span> {invoice.customer?.gst || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground print:text-black/70">Phone:</span> {invoice.customer?.phone || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground print:text-black/70">Email:</span> {invoice.customer?.email || "—"}
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground print:text-black/70">Address</div>
+                  <div className="mt-1 text-sm whitespace-pre-wrap">{invoice.customer?.address || "—"}</div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-1 text-sm">
+              <div className="rounded-lg border border-border/60 bg-white/60 p-4 md:text-right print:bg-transparent">
                 <div>
-                  <span className="text-muted-foreground">GST:</span> {invoice.customer?.gst || "—"}
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground print:text-black/70">System Invoice No</div>
+                  <div className="mt-1 text-base font-semibold">{invoice.invoiceNo || "—"}</div>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">Phone:</span> {invoice.customer?.phone || "—"}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Email:</span> {invoice.customer?.email || "—"}
-                </div>
-              </div>
 
-              <div>
-                <div className="text-xs text-muted-foreground">Address</div>
-                <div className="text-sm whitespace-pre-wrap">{invoice.customer?.address || "—"}</div>
+                <div className="mt-3">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground print:text-black/70">Manual Invoice No</div>
+                  <div className="mt-1 text-sm font-medium">{invoice.manualInvoiceNo || "—"}</div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-1 text-sm md:justify-items-end">
+                  <div>
+                    <span className="text-muted-foreground print:text-black/70">Issue Date:</span> {invoice.issueDate || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground print:text-black/70">Status:</span> {invoice.status || "—"}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2 md:text-right">
-              <div>
-                <div className="text-xs text-muted-foreground">System Invoice No</div>
-                <div className="text-base font-semibold">{invoice.invoiceNo || "—"}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Manual Invoice No</div>
-                <div className="text-sm font-medium">{invoice.manualInvoiceNo || "—"}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Issue Date</div>
-                <div className="text-sm">{invoice.issueDate || "—"}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Status</div>
-                <div className="text-sm">{invoice.status || "—"}</div>
-              </div>
+            <Separator className="my-6" />
+
+            <div className="flex items-center justify-between">
+              <div className="font-semibold">Items</div>
+              <div className="text-xs text-muted-foreground print:text-black/70">All amounts in INR (₹)</div>
             </div>
-          </div>
 
-          <Separator className="my-4" />
-
-          <div className="font-semibold mb-2">Items</div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Item</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead className="text-right">Rate</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {lineRows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-sm text-muted-foreground">No items</TableCell>
-                </TableRow>
-              ) : (
-                lineRows.map((r) => (
-                  <TableRow key={r.idx}>
-                    <TableCell>{r.idx}</TableCell>
-                    <TableCell>{r.name}</TableCell>
-                    <TableCell className="text-right">{r.qty}</TableCell>
-                    <TableCell>{r.unit}</TableCell>
-                    <TableCell className="text-right">₹{r.rate.toLocaleString("en-IN")}</TableCell>
-                    <TableCell className="text-right">₹{r.amount.toLocaleString("en-IN")}</TableCell>
+            <div className="mt-3 rounded-lg border border-border/60 overflow-hidden">
+              <Table className="text-sm">
+                <TableHeader className="bg-muted/30 print:bg-transparent">
+                  <TableRow>
+                    <TableHead className="w-[48px]">#</TableHead>
+                    <TableHead>Item</TableHead>
+                    <TableHead className="text-right w-[90px]">Qty</TableHead>
+                    <TableHead className="w-[90px]">Unit</TableHead>
+                    <TableHead className="text-right w-[120px]">Rate</TableHead>
+                    <TableHead className="text-right w-[140px]">Amount</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {lineRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-sm text-muted-foreground">No items</TableCell>
+                    </TableRow>
+                  ) : (
+                    lineRows.map((r) => (
+                      <TableRow key={r.idx} className={r.idx % 2 === 0 ? "bg-muted/10 print:bg-transparent" : ""}>
+                        <TableCell className="text-muted-foreground print:text-black/70">{r.idx}</TableCell>
+                        <TableCell className="font-medium">{r.name}</TableCell>
+                        <TableCell className="text-right">{r.qty}</TableCell>
+                        <TableCell>{r.unit}</TableCell>
+                        <TableCell className="text-right">₹{r.rate.toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-right">₹{r.amount.toLocaleString("en-IN")}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
-          <div className="mt-4 flex justify-end">
-            <div className="w-full max-w-sm space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span>₹{subtotal.toLocaleString("en-IN")}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Tax</span>
-                <span>₹{taxAmount.toLocaleString("en-IN")}</span>
-              </div>
-              <Separator />
-              <div className="flex justify-between font-semibold">
-                <span>Total</span>
-                <span>₹{total.toLocaleString("en-IN")}</span>
+            <div className="mt-6 flex justify-end">
+              <div className="w-full max-w-sm rounded-lg border border-border/60 bg-white/60 p-4 print:bg-transparent">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground print:text-black/70">Subtotal</span>
+                  <span className="font-medium">₹{subtotal.toLocaleString("en-IN")}</span>
+                </div>
+                <div className="mt-2 flex justify-between text-sm">
+                  <span className="text-muted-foreground print:text-black/70">Tax{taxPercentLabel ? ` (${taxPercentLabel})` : ""}</span>
+                  <span className="font-medium">₹{taxAmount.toLocaleString("en-IN")}</span>
+                </div>
+                <Separator className="my-3" />
+                <div className="flex justify-between text-base font-semibold">
+                  <span>Total</span>
+                  <span>₹{total.toLocaleString("en-IN")}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {invoice.notes ? (
-            <>
-              <Separator className="my-4" />
-              <div className="text-sm text-muted-foreground">Notes</div>
-              <div className="text-sm whitespace-pre-wrap">{invoice.notes}</div>
-            </>
-          ) : null}
+            {invoice.notes ? (
+              <>
+                <Separator className="my-6" />
+                <div className="text-xs uppercase tracking-wide text-muted-foreground print:text-black/70">Notes</div>
+                <div className="mt-2 text-sm whitespace-pre-wrap">{invoice.notes}</div>
+              </>
+            ) : null}
+
+            <Separator className="my-6" />
+            <div className="text-xs text-muted-foreground print:text-black/70 flex items-center justify-between">
+              <span>Computer generated invoice</span>
+              <span>Printed on {new Date().toLocaleString()}</span>
+            </div>
+          </div>
         </Card>
       </div>
     </div>

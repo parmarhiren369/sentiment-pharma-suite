@@ -10,7 +10,16 @@ import { doc, getDoc } from "firebase/firestore";
 import { ArrowLeft, Printer } from "lucide-react";
 
 const COMPANY_NAME = "Sentiment Pharma";
-const COMPANY_SUBTITLE = "Invoice Summary";
+const SYSTEM_NAME = "Sentiment Pharma Suite - Invoice System";
+const CURRENCY = "₹";
+
+// These can later be moved to Settings/Firestore.
+const INVOICE_FROM = {
+  name: COMPANY_NAME,
+  pin: "—",
+  address: "—",
+  mobile: "—",
+};
 
 type InvoiceLineItem = {
   processedInventoryId?: string;
@@ -23,6 +32,8 @@ type InvoiceLineItem = {
 type InvoiceDoc = {
   invoiceNo: string;
   manualInvoiceNo?: string;
+  cuNumber?: string;
+  pin?: string;
   issueDate?: string;
   partyName?: string;
   customer?: {
@@ -30,6 +41,7 @@ type InvoiceDoc = {
     address?: string;
     phone?: string;
     email?: string;
+    pin?: string;
   };
   items?: InvoiceLineItem[];
   subtotal?: number;
@@ -39,6 +51,23 @@ type InvoiceDoc = {
   status?: string;
   notes?: string;
 };
+
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : String(n);
+}
+
+function formatDateTime(d: Date): string {
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function formatDateTimeWithSeconds(d: Date): string {
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()} at ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+function formatMoney(n: number): string {
+  const value = Number.isFinite(n) ? n : 0;
+  return `${CURRENCY} ${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 export default function InvoicePrint() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
@@ -74,6 +103,24 @@ export default function InvoicePrint() {
     if (typeof pct === "number" && Number.isFinite(pct)) return `${pct}%`;
     return undefined;
   }, [invoice?.taxPercent]);
+
+  const printedAt = useMemo(() => new Date(), []);
+
+  const taxSummaryRows = useMemo(() => {
+    const pct = typeof invoice?.taxPercent === "number" ? invoice.taxPercent : 0;
+    const hasNonZero = Number.isFinite(pct) && pct > 0;
+    const rows: Array<{ rate: string; taxable: number; tax: number; total: number }> = [];
+
+    if (hasNonZero) {
+      rows.push({ rate: `${pct}%`, taxable: subtotal, tax: taxAmount, total });
+      rows.push({ rate: "0%", taxable: 0, tax: 0, total: 0 });
+    } else {
+      rows.push({ rate: "0%", taxable: subtotal, tax: 0, total });
+    }
+
+    rows.push({ rate: "Ex.", taxable: 0, tax: 0, total: 0 });
+    return rows;
+  }, [invoice?.taxPercent, subtotal, taxAmount, total]);
 
   const total = useMemo(() => {
     if (typeof invoice?.total === "number") return invoice.total;
@@ -146,7 +193,7 @@ export default function InvoicePrint() {
 
   return (
     <div className="min-h-screen bg-muted/30 p-6 print:bg-white print:p-0 print:text-black">
-      <div className="max-w-4xl mx-auto print:max-w-none print:mx-0 print:p-6">
+      <div className="max-w-5xl mx-auto print:max-w-none print:mx-0 print:p-6">
         <div className="flex items-center justify-between gap-2 mb-4 print:hidden">
           <Button variant="outline" className="gap-2" onClick={() => navigate("/invoices")}
           >
@@ -159,131 +206,157 @@ export default function InvoicePrint() {
           </Button>
         </div>
 
-        <Card className="p-8 shadow-lg border border-border/60 rounded-2xl print:shadow-none print:border-0 print:rounded-none print:p-0">
-          <div className="print:p-0">
-            <div className="text-center">
-              <div className="text-3xl font-extrabold tracking-wide leading-tight">{COMPANY_NAME}</div>
-              <div className="mt-1 text-xs uppercase tracking-[0.2em] text-muted-foreground print:text-black/70">{COMPANY_SUBTITLE}</div>
-            </div>
+        <Card className="p-6 shadow-lg border border-border/60 rounded-2xl print:shadow-none print:border-0 print:rounded-none print:p-0">
+          <div className="text-sm text-muted-foreground print:text-black/70">
+            {formatDateTime(printedAt)} Invoice - {invoice.invoiceNo || "—"} {invoice.partyName || ""}
+          </div>
 
-            <Separator className="my-6" />
+          <div className="mt-3 text-center">
+            <div className="text-2xl font-extrabold tracking-wide">{COMPANY_NAME}</div>
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground print:text-black/70">INVOICE</div>
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-border/60 bg-white/60 p-4 print:bg-transparent">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground print:text-black/70">Bill To</div>
-                <div className="mt-1 text-base font-semibold">{invoice.partyName || "—"}</div>
+          <Separator className="my-4" />
 
-                <div className="mt-3 grid grid-cols-1 gap-1 text-sm">
-                  <div>
-                    <span className="text-muted-foreground print:text-black/70">GST:</span> {invoice.customer?.gst || "—"}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground print:text-black/70">Phone:</span> {invoice.customer?.phone || "—"}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground print:text-black/70">Email:</span> {invoice.customer?.email || "—"}
-                  </div>
-                </div>
-
-                <div className="mt-3">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground print:text-black/70">Address</div>
-                  <div className="mt-1 text-sm whitespace-pre-wrap">{invoice.customer?.address || "—"}</div>
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-border/60 bg-white/60 p-4 md:text-right print:bg-transparent">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <div className="text-xs font-semibold tracking-wide">INVOICE FROM</div>
+              <div className="mt-2 space-y-1 text-sm">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground print:text-black/70">System Invoice No</div>
-                  <div className="mt-1 text-base font-semibold">{invoice.invoiceNo || "—"}</div>
+                  <span className="text-muted-foreground print:text-black/70">NAME:</span> {INVOICE_FROM.name}
                 </div>
-
-                <div className="mt-3">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground print:text-black/70">Manual Invoice No</div>
-                  <div className="mt-1 text-sm font-medium">{invoice.manualInvoiceNo || "—"}</div>
+                <div>
+                  <span className="text-muted-foreground print:text-black/70">PIN:</span> {INVOICE_FROM.pin}
                 </div>
-
-                <div className="mt-3 grid grid-cols-1 gap-1 text-sm md:justify-items-end">
-                  <div>
-                    <span className="text-muted-foreground print:text-black/70">Issue Date:</span> {invoice.issueDate || "—"}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground print:text-black/70">Status:</span> {invoice.status || "—"}
-                  </div>
+                <div className="whitespace-pre-wrap">
+                  <span className="text-muted-foreground print:text-black/70">ADDRESS:</span> {INVOICE_FROM.address}
+                </div>
+                <div>
+                  <span className="text-muted-foreground print:text-black/70">MOBILE:</span> {INVOICE_FROM.mobile}
                 </div>
               </div>
             </div>
 
-            <Separator className="my-6" />
-
-            <div className="flex items-center justify-between">
-              <div className="font-semibold">Items</div>
-              <div className="text-xs text-muted-foreground print:text-black/70">All amounts in INR (₹)</div>
+            <div>
+              <div className="text-xs font-semibold tracking-wide">INVOICE TO</div>
+              <div className="mt-2 space-y-1 text-sm">
+                <div>
+                  <span className="text-muted-foreground print:text-black/70">NAME:</span> {invoice.partyName || "—"}
+                </div>
+                <div>
+                  <span className="text-muted-foreground print:text-black/70">Customer PIN:</span> {invoice.customer?.pin || invoice.pin || "—"}
+                </div>
+                <div className="whitespace-pre-wrap">
+                  <span className="text-muted-foreground print:text-black/70">ADDRESS:</span> {invoice.customer?.address || "—"}
+                </div>
+                <div>
+                  <span className="text-muted-foreground print:text-black/70">MOBILE:</span> {invoice.customer?.phone || "—"}
+                </div>
+              </div>
             </div>
+          </div>
 
-            <div className="mt-3 rounded-lg border border-border/60 overflow-hidden">
-              <Table className="text-sm">
-                <TableHeader className="bg-muted/30 print:bg-transparent">
-                  <TableRow>
-                    <TableHead className="w-[48px]">#</TableHead>
-                    <TableHead>Item</TableHead>
-                    <TableHead className="text-right w-[90px]">Qty</TableHead>
-                    <TableHead className="w-[90px]">Unit</TableHead>
-                    <TableHead className="text-right w-[120px]">Rate</TableHead>
-                    <TableHead className="text-right w-[140px]">Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lineRows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-sm text-muted-foreground">No items</TableCell>
+          <Separator className="my-4" />
+
+          <div>
+            <div className="text-xs font-semibold tracking-wide">INVOICE NO.</div>
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div>
+                <span className="text-muted-foreground print:text-black/70">Invoice:</span> {invoice.invoiceNo || "—"}
+              </div>
+              <div>
+                <span className="text-muted-foreground print:text-black/70">CU Number:</span> {invoice.cuNumber || "—"}
+              </div>
+              <div>
+                <span className="text-muted-foreground print:text-black/70">Date:</span> {invoice.issueDate || "—"}
+              </div>
+            </div>
+          </div>
+
+          <Separator className="my-4" />
+
+          <Table className="text-sm">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[56px]">S/N</TableHead>
+                <TableHead>Item Description</TableHead>
+                <TableHead className="text-right w-[110px]">Qty</TableHead>
+                <TableHead className="w-[80px]">Unit</TableHead>
+                <TableHead className="text-right w-[130px]">Unit Price</TableHead>
+                <TableHead className="text-right w-[90px]">Rate</TableHead>
+                <TableHead className="text-right w-[160px]">Amt incl. Tax</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {lineRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-sm text-muted-foreground">No items</TableCell>
+                </TableRow>
+              ) : (
+                lineRows.map((r) => {
+                  const base = r.amount;
+                  const allocTax = subtotal > 0 ? (base / subtotal) * taxAmount : 0;
+                  const amtInclTax = base + allocTax;
+                  return (
+                    <TableRow key={r.idx}>
+                      <TableCell>{r.idx}</TableCell>
+                      <TableCell className="font-medium">{r.name}</TableCell>
+                      <TableCell className="text-right">{r.qty.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                      <TableCell>{r.unit}</TableCell>
+                      <TableCell className="text-right">{formatMoney(r.rate)}</TableCell>
+                      <TableCell className="text-right">{taxPercentLabel || "0%"}</TableCell>
+                      <TableCell className="text-right">{formatMoney(amtInclTax)}</TableCell>
                     </TableRow>
-                  ) : (
-                    lineRows.map((r) => (
-                      <TableRow key={r.idx} className={r.idx % 2 === 0 ? "bg-muted/10 print:bg-transparent" : ""}>
-                        <TableCell className="text-muted-foreground print:text-black/70">{r.idx}</TableCell>
-                        <TableCell className="font-medium">{r.name}</TableCell>
-                        <TableCell className="text-right">{r.qty}</TableCell>
-                        <TableCell>{r.unit}</TableCell>
-                        <TableCell className="text-right">₹{r.rate.toLocaleString("en-IN")}</TableCell>
-                        <TableCell className="text-right">₹{r.amount.toLocaleString("en-IN")}</TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
 
-            <div className="mt-6 flex justify-end">
-              <div className="w-full max-w-sm rounded-lg border border-border/60 bg-white/60 p-4 print:bg-transparent">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground print:text-black/70">Subtotal</span>
-                  <span className="font-medium">₹{subtotal.toLocaleString("en-IN")}</span>
-                </div>
-                <div className="mt-2 flex justify-between text-sm">
-                  <span className="text-muted-foreground print:text-black/70">Tax{taxPercentLabel ? ` (${taxPercentLabel})` : ""}</span>
-                  <span className="font-medium">₹{taxAmount.toLocaleString("en-IN")}</span>
-                </div>
-                <Separator className="my-3" />
-                <div className="flex justify-between text-base font-semibold">
-                  <span>Total</span>
-                  <span>₹{total.toLocaleString("en-IN")}</span>
-                </div>
-              </div>
-            </div>
+          <Separator className="my-4" />
 
-            {invoice.notes ? (
-              <>
-                <Separator className="my-6" />
-                <div className="text-xs uppercase tracking-wide text-muted-foreground print:text-black/70">Notes</div>
-                <div className="mt-2 text-sm whitespace-pre-wrap">{invoice.notes}</div>
-              </>
-            ) : null}
+          <div className="text-xs font-semibold tracking-wide">TAX SUMMARY</div>
+          <div className="mt-2 rounded-lg border border-border/60 overflow-hidden">
+            <Table className="text-sm">
+              <TableHeader className="bg-muted/30 print:bg-transparent">
+                <TableRow>
+                  <TableHead>Tax Rate</TableHead>
+                  <TableHead className="text-right">Taxable Amt</TableHead>
+                  <TableHead className="text-right">Tax Amt</TableHead>
+                  <TableHead className="text-right">Total Amt</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {taxSummaryRows.map((r, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell>{r.rate}</TableCell>
+                    <TableCell className="text-right">{formatMoney(r.taxable)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(r.tax)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(r.total)}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow>
+                  <TableCell className="font-semibold">Totals</TableCell>
+                  <TableCell className="text-right font-semibold">{formatMoney(subtotal)}</TableCell>
+                  <TableCell className="text-right font-semibold">{formatMoney(taxAmount)}</TableCell>
+                  <TableCell className="text-right font-semibold">{formatMoney(total)}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
 
-            <Separator className="my-6" />
-            <div className="text-xs text-muted-foreground print:text-black/70 flex items-center justify-between">
-              <span>Computer generated invoice</span>
-              <span>Printed on {new Date().toLocaleString()}</span>
-            </div>
+          {invoice.notes ? (
+            <>
+              <Separator className="my-4" />
+              <div className="text-xs font-semibold tracking-wide">NOTES</div>
+              <div className="mt-2 text-sm whitespace-pre-wrap">{invoice.notes}</div>
+            </>
+          ) : null}
+
+          <Separator className="my-4" />
+          <div className="text-xs text-muted-foreground print:text-black/70 space-y-1">
+            <div>This invoice was generated on {formatDateTimeWithSeconds(printedAt)}</div>
+            <div>{SYSTEM_NAME}</div>
           </div>
         </Card>
       </div>

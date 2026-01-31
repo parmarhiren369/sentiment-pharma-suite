@@ -48,7 +48,7 @@ interface InvoiceFormState {
   issueDate: string;
   dueDate: string;
   subtotal: string;
-  tax: string;
+  taxPercent: string;
   status: InvoiceStatus;
   notes: string;
 }
@@ -84,7 +84,7 @@ export default function InvoiceNew() {
     issueDate: new Date().toISOString().slice(0, 10),
     dueDate: new Date().toISOString().slice(0, 10),
     subtotal: "",
-    tax: "0",
+    taxPercent: "0",
     status: "Pending",
     notes: "",
   });
@@ -106,10 +106,14 @@ export default function InvoiceNew() {
     return safeNumber(formData.subtotal);
   }, [formData.subtotal, lineItems]);
 
+  const computedTaxAmount = useMemo(() => {
+    const pct = safeNumber(formData.taxPercent);
+    return Math.max(0, (computedSubtotal * pct) / 100);
+  }, [computedSubtotal, formData.taxPercent]);
+
   const computedTotal = useMemo(() => {
-    const tax = safeNumber(formData.tax);
-    return Math.max(0, computedSubtotal + tax);
-  }, [computedSubtotal, formData.tax]);
+    return Math.max(0, computedSubtotal + computedTaxAmount);
+  }, [computedSubtotal, computedTaxAmount]);
 
   const fetchOptions = async () => {
     if (!db) {
@@ -203,8 +207,8 @@ export default function InvoiceNew() {
       return;
     }
 
-    const tax = safeNumber(formData.tax);
-    if (computedSubtotal < 0 || tax < 0) {
+    const taxPercent = safeNumber(formData.taxPercent);
+    if (computedSubtotal < 0 || taxPercent < 0) {
       toast({ title: "Validation error", description: "Amounts cannot be negative.", variant: "destructive" });
       return;
     }
@@ -237,7 +241,8 @@ export default function InvoiceNew() {
       dueDate: formData.dueDate,
       items: sanitizedItems,
       subtotal: computedSubtotal,
-      tax,
+      taxPercent,
+      tax: computedTaxAmount,
       total: computedTotal,
       status: formData.status,
       notes: formData.notes.trim(),
@@ -511,23 +516,6 @@ export default function InvoiceNew() {
                 <Label htmlFor="dueDate">Due Date</Label>
                 <Input id="dueDate" type="date" value={formData.dueDate} onChange={(e) => setFormData((s) => ({ ...s, dueDate: e.target.value }))} />
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="tax">Tax</Label>
-                <Input id="tax" type="number" value={formData.tax} onChange={(e) => setFormData((s) => ({ ...s, tax: e.target.value }))} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="subtotal">Manual Subtotal</Label>
-                <Input
-                  id="subtotal"
-                  type="number"
-                  value={formData.subtotal}
-                  onChange={(e) => setFormData((s) => ({ ...s, subtotal: e.target.value }))}
-                  placeholder={lineItems.length ? "Calculated from items" : "Optional"}
-                  disabled={lineItems.length > 0}
-                />
-              </div>
             </div>
 
             <div className="mt-4 space-y-2">
@@ -552,21 +540,21 @@ export default function InvoiceNew() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="tax">Tax</Label>
-                <Input id="tax" type="number" inputMode="decimal" value={formData.tax} onChange={(e) => setFormData((s) => ({ ...s, tax: e.target.value }))} placeholder="0" />
+                <Label htmlFor="taxPercent">Tax (%)</Label>
+                <Input
+                  id="taxPercent"
+                  type="number"
+                  inputMode="decimal"
+                  value={formData.taxPercent}
+                  onChange={(e) => setFormData((s) => ({ ...s, taxPercent: e.target.value }))}
+                  placeholder="0"
+                />
               </div>
 
               <div className="space-y-2">
                 <Label>Total</Label>
                 <Input value={computedTotal.toString()} readOnly />
               </div>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea id="notes" value={formData.notes} onChange={(e) => setFormData((s) => ({ ...s, notes: e.target.value }))} placeholder="Optional notes" />
             </div>
           </Card>
 

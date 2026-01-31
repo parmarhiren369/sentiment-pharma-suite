@@ -106,6 +106,11 @@ export default function InvoicePrint() {
 
   const printedAt = useMemo(() => new Date(), []);
 
+  const total = useMemo(() => {
+    if (typeof invoice?.total === "number") return invoice.total;
+    return subtotal + taxAmount;
+  }, [invoice?.total, subtotal, taxAmount]);
+
   const taxSummaryRows = useMemo(() => {
     const pct = typeof invoice?.taxPercent === "number" ? invoice.taxPercent : 0;
     const hasNonZero = Number.isFinite(pct) && pct > 0;
@@ -121,11 +126,6 @@ export default function InvoicePrint() {
     rows.push({ rate: "Ex.", taxable: 0, tax: 0, total: 0 });
     return rows;
   }, [invoice?.taxPercent, subtotal, taxAmount, total]);
-
-  const total = useMemo(() => {
-    if (typeof invoice?.total === "number") return invoice.total;
-    return subtotal + taxAmount;
-  }, [invoice?.total, subtotal, taxAmount]);
 
   useEffect(() => {
     const run = async () => {

@@ -24,7 +24,7 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { FileText, IndianRupee, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { FileText, IndianRupee, Pencil, Plus, Printer, RefreshCw, Trash2 } from "lucide-react";
 
 type InvoiceStatus = "Approved" | "In Process" | "Paid" | "Pending" | "Overdue";
 
@@ -461,6 +461,16 @@ export default function Invoices() {
         header: "Actions",
         render: (i: InvoiceRecord) => (
           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              onClick={() => window.open(`/invoices/${i.id}/print`, "_blank", "noopener,noreferrer")}
+              title="Print"
+            >
+              <Printer className="w-4 h-4" />
+              Print
+            </Button>
             <Button variant="outline" size="sm" className="gap-1" onClick={() => openEdit(i)}>
               <Pencil className="w-4 h-4" />
               Edit

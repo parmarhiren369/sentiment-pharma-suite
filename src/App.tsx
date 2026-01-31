@@ -25,6 +25,7 @@ import Transactions from "./pages/Transactions";
 import Payments from "./pages/Payments";
 import Invoices from "./pages/Invoices";
 import InvoiceNew from "./pages/InvoiceNew";
+import InvoicePrint from "./pages/InvoicePrint";
 import DebitCreditNotes from "./pages/DebitCreditNotes";
 import DebitCreditNoteNew from "./pages/DebitCreditNoteNew";
 import { Suspense } from "react";
@@ -63,6 +64,7 @@ const App = () => {
               <Routes>
                 <Route path="/doctor-login" element={<DoctorLogin />} />
                 <Route path="/doctor-dashboard" element={<DoctorDashboard />} />
+                <Route path="/invoices/:invoiceId/print" element={<InvoicePrint />} />
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Index />} />
                   <Route path="/items" element={<Items />} />

@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { addDoc, collection, getDocs, Timestamp } from "firebase/firestore";
-import { ArrowLeft, FileText, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronsUpDown, FileText, Plus, Trash2 } from "lucide-react";
 
 type InvoiceStatus = "Paid" | "Pending" | "Overdue";
 
@@ -31,13 +33,17 @@ interface InvoiceLineItem {
 interface PartyOption {
   id: string;
   name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  gst?: string;
 }
 
 interface InvoiceFormState {
   invoiceNo: string;
+  manualInvoiceNo: string;
   cuNumber: string;
   pin: string;
-  partyType: "customer" | "supplier";
   partyId: string;
   issueDate: string;
   dueDate: string;
@@ -52,22 +58,28 @@ function safeNumber(value: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function generateSystemInvoiceNo(date: string): string {
+  const ymd = (date || new Date().toISOString().slice(0, 10)).replace(/-/g, "");
+  const suffix = Math.floor(1000 + Math.random() * 9000);
+  return `INV-${ymd}-${suffix}`;
+}
+
 export default function InvoiceNew() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const [customers, setCustomers] = useState<PartyOption[]>([]);
-  const [suppliers, setSuppliers] = useState<PartyOption[]>([]);
   const [processedInventoryOptions, setProcessedInventoryOptions] = useState<ProcessedInventoryOption[]>([]);
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState<InvoiceFormState>({
     invoiceNo: "",
+    manualInvoiceNo: "",
     cuNumber: "",
     pin: "",
-    partyType: "customer",
     partyId: "",
     issueDate: new Date().toISOString().slice(0, 10),
     dueDate: new Date().toISOString().slice(0, 10),
@@ -79,8 +91,7 @@ export default function InvoiceNew() {
 
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([]);
 
-  const partyOptions = useMemo(() => (formData.partyType === "supplier" ? suppliers : customers), [customers, suppliers, formData.partyType]);
-  const selectedParty = useMemo(() => partyOptions.find((p) => p.id === formData.partyId) || null, [partyOptions, formData.partyId]);
+  const selectedCustomer = useMemo(() => customers.find((p) => p.id === formData.partyId) || null, [customers, formData.partyId]);
 
   const processedInventoryById = useMemo(() => {
     const map = new Map<string, ProcessedInventoryOption>();
@@ -112,19 +123,23 @@ export default function InvoiceNew() {
 
     setIsLoading(true);
     try {
-      const [customersSnap, suppliersSnap, processedInvSnap] = await Promise.all([
+      const [customersSnap, processedInvSnap] = await Promise.all([
         getDocs(collection(db, "customers")),
-        getDocs(collection(db, "suppliers")),
         getDocs(collection(db, "processedInventory")),
       ]);
 
       const customersList = customersSnap.docs
-        .map((d) => ({ id: d.id, name: (d.data().name || "").toString() }))
-        .filter((x) => x.name)
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-      const suppliersList = suppliersSnap.docs
-        .map((d) => ({ id: d.id, name: (d.data().name || "").toString() }))
+        .map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            name: (data.name || "").toString(),
+            address: (data.address || "").toString() || undefined,
+            phone: (data.phone || "").toString() || undefined,
+            email: (data.email || "").toString() || undefined,
+            gst: (data.gst || "").toString() || undefined,
+          } as PartyOption;
+        })
         .filter((x) => x.name)
         .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -141,7 +156,6 @@ export default function InvoiceNew() {
         .sort((a, b) => a.name.localeCompare(b.name));
 
       setCustomers(customersList);
-      setSuppliers(suppliersList);
       setProcessedInventoryOptions(processedList);
     } catch (error) {
       console.error("Error loading invoice options", error);
@@ -156,8 +170,11 @@ export default function InvoiceNew() {
   }, []);
 
   useEffect(() => {
-    setFormData((s) => ({ ...s, partyId: "" }));
-  }, [formData.partyType]);
+    setFormData((s) => {
+      if (s.invoiceNo) return s;
+      return { ...s, invoiceNo: generateSystemInvoiceNo(s.issueDate) };
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,8 +193,13 @@ export default function InvoiceNew() {
       return;
     }
 
+    if (!formData.manualInvoiceNo.trim()) {
+      toast({ title: "Validation error", description: "Manual invoice number is required.", variant: "destructive" });
+      return;
+    }
+
     if (!formData.partyId) {
-      toast({ title: "Validation error", description: "Select a party.", variant: "destructive" });
+      toast({ title: "Validation error", description: "Select a customer.", variant: "destructive" });
       return;
     }
 
@@ -199,11 +221,18 @@ export default function InvoiceNew() {
 
     const payload = {
       invoiceNo: formData.invoiceNo.trim(),
+      manualInvoiceNo: formData.manualInvoiceNo.trim(),
       cuNumber: formData.cuNumber.trim(),
       pin: formData.pin.trim(),
-      partyType: formData.partyType,
+      partyType: "customer" as const,
       partyId: formData.partyId,
-      partyName: selectedParty?.name || "",
+      partyName: selectedCustomer?.name || "",
+      customer: {
+        address: selectedCustomer?.address || "",
+        phone: selectedCustomer?.phone || "",
+        email: selectedCustomer?.email || "",
+        gst: selectedCustomer?.gst || "",
+      },
       issueDate: formData.issueDate,
       dueDate: formData.dueDate,
       items: sanitizedItems,
@@ -255,8 +284,64 @@ export default function InvoiceNew() {
           <Card className="p-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="invoiceNo">System Invoice *</Label>
-                <Input id="invoiceNo" value={formData.invoiceNo} onChange={(e) => setFormData((s) => ({ ...s, invoiceNo: e.target.value }))} />
+                <Label htmlFor="invoiceNo">System Invoice No</Label>
+                <Input id="invoiceNo" value={formData.invoiceNo} readOnly disabled />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="manualInvoiceNo">Manual Invoice No *</Label>
+                <Input
+                  id="manualInvoiceNo"
+                  value={formData.manualInvoiceNo}
+                  onChange={(e) => setFormData((s) => ({ ...s, manualInvoiceNo: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Customer *</Label>
+                <Popover open={customerPickerOpen} onOpenChange={setCustomerPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={customerPickerOpen}
+                      className="w-full justify-between"
+                      disabled={isLoading}
+                    >
+                      {selectedCustomer?.name || (isLoading ? "Loading..." : "Select customer")}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search customer..." />
+                      <CommandList>
+                        <CommandEmpty>No customer found.</CommandEmpty>
+                        <CommandGroup>
+                          {customers.map((c) => (
+                            <CommandItem
+                              key={c.id}
+                              value={c.name}
+                              onSelect={() => {
+                                setFormData((s) => ({ ...s, partyId: c.id }));
+                                setCustomerPickerOpen(false);
+                              }}
+                            >
+                              <Check className={"mr-2 h-4 w-4 " + (formData.partyId === c.id ? "opacity-100" : "opacity-0")} />
+                              {c.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="issueDate">Issue Date (Invoice)</Label>
+                <Input id="issueDate" type="date" value={formData.issueDate} onChange={(e) => setFormData((s) => ({ ...s, issueDate: e.target.value }))} />
               </div>
 
               <div className="space-y-2">
@@ -268,61 +353,30 @@ export default function InvoiceNew() {
                 <Label htmlFor="pin">PIN</Label>
                 <Input id="pin" value={formData.pin} onChange={(e) => setFormData((s) => ({ ...s, pin: e.target.value }))} placeholder="Optional" />
               </div>
+            </div>
+          </Card>
 
+          <Card className="p-4">
+            <div className="font-semibold mb-3">Customer Details</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={formData.status} onValueChange={(v) => setFormData((s) => ({ ...s, status: v as InvoiceStatus }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Paid">Paid</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Overdue">Overdue</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>GST No</Label>
+                <Input value={selectedCustomer?.gst || ""} readOnly disabled={!selectedCustomer} />
               </div>
 
               <div className="space-y-2">
-                <Label>Party Type</Label>
-                <Select
-                  value={formData.partyType}
-                  onValueChange={(v) => setFormData((s) => ({ ...s, partyType: v as "customer" | "supplier" }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="customer">Customer</SelectItem>
-                    <SelectItem value="supplier">Supplier</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Phone</Label>
+                <Input value={selectedCustomer?.phone || ""} readOnly disabled={!selectedCustomer} />
               </div>
 
               <div className="space-y-2">
-                <Label>Party *</Label>
-                <Select value={formData.partyId} onValueChange={(v) => setFormData((s) => ({ ...s, partyId: v }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={isLoading ? "Loading..." : formData.partyType === "customer" ? "Select customer" : "Select supplier"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {partyOptions.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Email</Label>
+                <Input value={selectedCustomer?.email || ""} readOnly disabled={!selectedCustomer} />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="issueDate">Issue Date</Label>
-                <Input id="issueDate" type="date" value={formData.issueDate} onChange={(e) => setFormData((s) => ({ ...s, issueDate: e.target.value }))} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="dueDate">Due Date</Label>
-                <Input id="dueDate" type="date" value={formData.dueDate} onChange={(e) => setFormData((s) => ({ ...s, dueDate: e.target.value }))} />
+                <Label>Address</Label>
+                <Textarea value={selectedCustomer?.address || ""} readOnly disabled={!selectedCustomer} />
               </div>
             </div>
           </Card>
@@ -434,6 +488,52 @@ export default function InvoiceNew() {
                 })}
               </div>
             )}
+          </Card>
+
+          <Card className="p-4">
+            <div className="font-semibold mb-3">Other Details</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={formData.status} onValueChange={(v) => setFormData((s) => ({ ...s, status: v as InvoiceStatus }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Paid">Paid</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Overdue">Overdue</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="dueDate">Due Date</Label>
+                <Input id="dueDate" type="date" value={formData.dueDate} onChange={(e) => setFormData((s) => ({ ...s, dueDate: e.target.value }))} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="tax">Tax</Label>
+                <Input id="tax" type="number" value={formData.tax} onChange={(e) => setFormData((s) => ({ ...s, tax: e.target.value }))} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="subtotal">Manual Subtotal</Label>
+                <Input
+                  id="subtotal"
+                  type="number"
+                  value={formData.subtotal}
+                  onChange={(e) => setFormData((s) => ({ ...s, subtotal: e.target.value }))}
+                  placeholder={lineItems.length ? "Calculated from items" : "Optional"}
+                  disabled={lineItems.length > 0}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea id="notes" value={formData.notes} onChange={(e) => setFormData((s) => ({ ...s, notes: e.target.value }))} />
+            </div>
           </Card>
 
           <Card className="p-4">

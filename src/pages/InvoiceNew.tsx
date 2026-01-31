@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppHeader } from "@/components/layout/AppHeader";
-import { StatCard } from "@/components/cards/StatCard";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { addDoc, collection, getDocs, Timestamp } from "firebase/firestore";
-import { ArrowLeft, FileText, IndianRupee, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, FileText, Plus, Trash2 } from "lucide-react";
 
 type InvoiceStatus = "Paid" | "Pending" | "Overdue";
 
@@ -250,27 +249,6 @@ export default function InvoiceNew() {
             <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatCard
-            title="Subtotal"
-            value={`₹${computedSubtotal.toLocaleString("en-IN")}`}
-            change={lineItems.length ? "From items" : "Manual"}
-            changeType="neutral"
-            icon={IndianRupee}
-            iconBgColor="bg-secondary"
-            iconColor="text-foreground"
-          />
-          <StatCard
-            title="Total"
-            value={`₹${computedTotal.toLocaleString("en-IN")}`}
-            change={"Including tax"}
-            changeType="neutral"
-            icon={IndianRupee}
-            iconBgColor="bg-primary/20"
-            iconColor="text-primary"
-          />
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

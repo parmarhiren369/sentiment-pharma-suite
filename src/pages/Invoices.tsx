@@ -26,7 +26,7 @@ import {
 } from "firebase/firestore";
 import { FileText, IndianRupee, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 
-type InvoiceStatus = "Paid" | "Pending" | "Overdue";
+type InvoiceStatus = "Approved" | "In Process" | "Paid" | "Pending" | "Overdue";
 
 interface ProcessedInventoryOption {
   id: string;
@@ -151,9 +151,10 @@ export default function Invoices() {
     () =>
       filtered.map((i) => ({
         "System Invoice": i.invoiceNo,
+        "Manual Invoice": (i as any).manualInvoiceNo || "",
         "CU Number": i.cuNumber || "",
         Date: i.issueDate,
-        Customer: i.partyName,
+        Party: i.partyName,
         PIN: i.pin || "",
         Items: (i.items || [])
           .map((x) => {

@@ -11,10 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { addDoc, collection, getDocs, Timestamp } from "firebase/firestore";
+import { collection, doc, getDocs, runTransaction, Timestamp } from "firebase/firestore";
 import { ArrowLeft, Check, ChevronsUpDown, FileText, Plus, Trash2 } from "lucide-react";
 
-type InvoiceStatus = "Paid" | "Pending" | "Overdue";
+type InvoiceStatus = "Approved" | "In Process";
 
 interface ProcessedInventoryOption {
   id: string;
@@ -42,11 +42,8 @@ interface PartyOption {
 interface InvoiceFormState {
   invoiceNo: string;
   manualInvoiceNo: string;
-  cuNumber: string;
-  pin: string;
   partyId: string;
   issueDate: string;
-  dueDate: string;
   subtotal: string;
   taxPercent: string;
   status: InvoiceStatus;
@@ -78,14 +75,11 @@ export default function InvoiceNew() {
   const [formData, setFormData] = useState<InvoiceFormState>({
     invoiceNo: "",
     manualInvoiceNo: "",
-    cuNumber: "",
-    pin: "",
     partyId: "",
     issueDate: new Date().toISOString().slice(0, 10),
-    dueDate: new Date().toISOString().slice(0, 10),
     subtotal: "",
     taxPercent: "0",
-    status: "Pending",
+    status: "In Process",
     notes: "",
   });
 
@@ -221,13 +215,25 @@ export default function InvoiceNew() {
         quantity: Number(it.quantity) || 0,
         rate: Number(it.rate) || 0,
       }))
-      .filter((it) => it.name && it.quantity > 0);
+      .filter((it) => it.processedInventoryId && it.name && it.quantity > 0);
+
+    if (lineItems.length > 0 && sanitizedItems.length === 0) {
+      toast({
+        title: "Validation error",
+        description: "Please select processed inventory item(s) and enter quantity.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const quantitiesByProcessedId = new Map<string, number>();
+    for (const it of sanitizedItems) {
+      quantitiesByProcessedId.set(it.processedInventoryId, (quantitiesByProcessedId.get(it.processedInventoryId) || 0) + (Number(it.quantity) || 0));
+    }
 
     const payload = {
       invoiceNo: formData.invoiceNo.trim(),
       manualInvoiceNo: formData.manualInvoiceNo.trim(),
-      cuNumber: formData.cuNumber.trim(),
-      pin: formData.pin.trim(),
       partyType: "customer" as const,
       partyId: formData.partyId,
       partyName: selectedCustomer?.name || "",
@@ -238,7 +244,6 @@ export default function InvoiceNew() {
         gst: selectedCustomer?.gst || "",
       },
       issueDate: formData.issueDate,
-      dueDate: formData.dueDate,
       items: sanitizedItems,
       subtotal: computedSubtotal,
       taxPercent,
@@ -252,12 +257,41 @@ export default function InvoiceNew() {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "invoices"), payload);
+      const invoicesCol = collection(db, "invoices");
+      const invoiceRef = doc(invoicesCol);
+
+      await runTransaction(db, async (tx) => {
+        // Deduct processed inventory first (abort invoice if stock insufficient)
+        for (const [processedId, usedQty] of quantitiesByProcessedId.entries()) {
+          const invRef = doc(db, "processedInventory", processedId);
+          const snap = await tx.get(invRef);
+          if (!snap.exists()) {
+            throw new Error(`Processed inventory item not found: ${processedId}`);
+          }
+
+          const data = snap.data() as any;
+          const currentQty = typeof data.quantity === "number" ? data.quantity : parseFloat(data.quantity) || 0;
+          const nextQty = currentQty - usedQty;
+          if (nextQty < 0) {
+            const name = (data.name || "").toString();
+            throw new Error(`Insufficient stock for ${name || processedId}. Available: ${currentQty}, Required: ${usedQty}`);
+          }
+
+          tx.update(invRef, {
+            quantity: nextQty.toString(),
+            lastUpdated: new Date().toISOString().split("T")[0],
+          });
+        }
+
+        tx.set(invoiceRef, payload);
+      });
+
       toast({ title: "Saved", description: "Invoice saved to Firestore." });
       navigate("/invoices");
     } catch (error) {
       console.error("Error saving invoice", error);
-      toast({ title: "Save failed", description: "Could not save invoice.", variant: "destructive" });
+      const msg = error instanceof Error ? error.message : "Could not save invoice.";
+      toast({ title: "Save failed", description: msg, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -347,16 +381,6 @@ export default function InvoiceNew() {
               <div className="space-y-2">
                 <Label htmlFor="issueDate">Issue Date (Invoice)</Label>
                 <Input id="issueDate" type="date" value={formData.issueDate} onChange={(e) => setFormData((s) => ({ ...s, issueDate: e.target.value }))} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="cuNumber">CU Number</Label>
-                <Input id="cuNumber" value={formData.cuNumber} onChange={(e) => setFormData((s) => ({ ...s, cuNumber: e.target.value }))} placeholder="Optional" />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="pin">PIN</Label>
-                <Input id="pin" value={formData.pin} onChange={(e) => setFormData((s) => ({ ...s, pin: e.target.value }))} placeholder="Optional" />
               </div>
             </div>
           </Card>
@@ -505,16 +529,10 @@ export default function InvoiceNew() {
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Paid">Paid</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Overdue">Overdue</SelectItem>
+                    <SelectItem value="Approved">Approved</SelectItem>
+                    <SelectItem value="In Process">In Process</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="dueDate">Due Date</Label>
-                <Input id="dueDate" type="date" value={formData.dueDate} onChange={(e) => setFormData((s) => ({ ...s, dueDate: e.target.value }))} />
               </div>
             </div>
 

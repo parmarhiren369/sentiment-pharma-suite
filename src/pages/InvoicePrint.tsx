@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
@@ -10,8 +9,8 @@ import { doc, getDoc } from "firebase/firestore";
 import { ArrowLeft, Printer } from "lucide-react";
 
 const COMPANY_NAME = "Sentiment Pharma";
-const SYSTEM_NAME = "Sentiment Pharma Suite - Invoice System";
-const CURRENCY = "₹";
+const SYSTEM_NAME = "Recycle Business Manager - Invoice System";
+const CURRENCY = "KSh";
 
 // These can later be moved to Settings/Firestore.
 const INVOICE_FROM = {
@@ -66,7 +65,7 @@ function formatDateTimeWithSeconds(d: Date): string {
 
 function formatMoney(n: number): string {
   const value = Number.isFinite(n) ? n : 0;
-  return `${CURRENCY} ${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${CURRENCY} ${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export default function InvoicePrint() {
@@ -112,19 +111,12 @@ export default function InvoicePrint() {
   }, [invoice?.total, subtotal, taxAmount]);
 
   const taxSummaryRows = useMemo(() => {
-    const pct = typeof invoice?.taxPercent === "number" ? invoice.taxPercent : 0;
-    const hasNonZero = Number.isFinite(pct) && pct > 0;
-    const rows: Array<{ rate: string; taxable: number; tax: number; total: number }> = [];
-
-    if (hasNonZero) {
-      rows.push({ rate: `${pct}%`, taxable: subtotal, tax: taxAmount, total });
-      rows.push({ rate: "0%", taxable: 0, tax: 0, total: 0 });
-    } else {
-      rows.push({ rate: "0%", taxable: subtotal, tax: 0, total });
-    }
-
-    rows.push({ rate: "Ex.", taxable: 0, tax: 0, total: 0 });
-    return rows;
+    const pct = typeof invoice?.taxPercent === "number" && Number.isFinite(invoice.taxPercent) ? invoice.taxPercent : 16;
+    return [
+      { rate: `${pct}%`, taxable: subtotal, tax: taxAmount, total },
+      { rate: "0%", taxable: 0, tax: 0, total: 0 },
+      { rate: "Ex.", taxable: 0, tax: 0, total: 0 },
+    ];
   }, [invoice?.taxPercent, subtotal, taxAmount, total]);
 
   useEffect(() => {
@@ -192,7 +184,7 @@ export default function InvoicePrint() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 p-6 print:bg-white print:p-0 print:text-black">
+    <div className="min-h-screen bg-white p-6 print:p-0 text-black">
       <div className="max-w-5xl mx-auto print:max-w-none print:mx-0 print:p-6">
         <div className="flex items-center justify-between gap-2 mb-4 print:hidden">
           <Button variant="outline" className="gap-2" onClick={() => navigate("/invoices")}
@@ -206,33 +198,33 @@ export default function InvoicePrint() {
           </Button>
         </div>
 
-        <Card className="p-6 shadow-lg border border-border/60 rounded-2xl print:shadow-none print:border-0 print:rounded-none print:p-0">
-          <div className="text-sm text-muted-foreground print:text-black/70">
+        <div className="p-0">
+          <div className="text-sm">
             {formatDateTime(printedAt)} Invoice - {invoice.invoiceNo || "—"} {invoice.partyName || ""}
           </div>
 
           <div className="mt-3 text-center">
             <div className="text-2xl font-extrabold tracking-wide">{COMPANY_NAME}</div>
-            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground print:text-black/70">INVOICE</div>
+            <div className="text-xs uppercase tracking-[0.2em]">INVOICE</div>
           </div>
 
-          <Separator className="my-4" />
+          <Separator className="my-4 bg-black" />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <div className="text-xs font-semibold tracking-wide">INVOICE FROM</div>
               <div className="mt-2 space-y-1 text-sm">
                 <div>
-                  <span className="text-muted-foreground print:text-black/70">NAME:</span> {INVOICE_FROM.name}
+                  <span className="font-medium">NAME:</span> {INVOICE_FROM.name}
                 </div>
                 <div>
-                  <span className="text-muted-foreground print:text-black/70">PIN:</span> {INVOICE_FROM.pin}
+                  <span className="font-medium">PIN:</span> {INVOICE_FROM.pin}
                 </div>
                 <div className="whitespace-pre-wrap">
-                  <span className="text-muted-foreground print:text-black/70">ADDRESS:</span> {INVOICE_FROM.address}
+                  <span className="font-medium">ADDRESS:</span> {INVOICE_FROM.address}
                 </div>
                 <div>
-                  <span className="text-muted-foreground print:text-black/70">MOBILE:</span> {INVOICE_FROM.mobile}
+                  <span className="font-medium">MOBILE:</span> {INVOICE_FROM.mobile}
                 </div>
               </div>
             </div>
@@ -241,39 +233,39 @@ export default function InvoicePrint() {
               <div className="text-xs font-semibold tracking-wide">INVOICE TO</div>
               <div className="mt-2 space-y-1 text-sm">
                 <div>
-                  <span className="text-muted-foreground print:text-black/70">NAME:</span> {invoice.partyName || "—"}
+                  <span className="font-medium">NAME:</span> {invoice.partyName || "—"}
                 </div>
                 <div>
-                  <span className="text-muted-foreground print:text-black/70">Customer PIN:</span> {invoice.customer?.pin || invoice.pin || "—"}
+                  <span className="font-medium">Customer PIN:</span> {invoice.customer?.pin || invoice.pin || "—"}
                 </div>
                 <div className="whitespace-pre-wrap">
-                  <span className="text-muted-foreground print:text-black/70">ADDRESS:</span> {invoice.customer?.address || "—"}
+                  <span className="font-medium">ADDRESS:</span> {invoice.customer?.address || "—"}
                 </div>
                 <div>
-                  <span className="text-muted-foreground print:text-black/70">MOBILE:</span> {invoice.customer?.phone || "—"}
+                  <span className="font-medium">MOBILE:</span> {invoice.customer?.phone || "—"}
                 </div>
               </div>
             </div>
           </div>
 
-          <Separator className="my-4" />
+          <Separator className="my-4 bg-black" />
 
           <div>
             <div className="text-xs font-semibold tracking-wide">INVOICE NO.</div>
             <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
               <div>
-                <span className="text-muted-foreground print:text-black/70">Invoice:</span> {invoice.invoiceNo || "—"}
+                <span className="font-medium">Invoice:</span> {invoice.invoiceNo || "—"}
               </div>
               <div>
-                <span className="text-muted-foreground print:text-black/70">CU Number:</span> {invoice.cuNumber || "—"}
+                <span className="font-medium">CU Number:</span> {invoice.cuNumber || "—"}
               </div>
               <div>
-                <span className="text-muted-foreground print:text-black/70">Date:</span> {invoice.issueDate || "—"}
+                <span className="font-medium">Date:</span> {invoice.issueDate || "—"}
               </div>
             </div>
           </div>
 
-          <Separator className="my-4" />
+          <Separator className="my-4 bg-black" />
 
           <Table className="text-sm">
             <TableHeader>
@@ -290,7 +282,7 @@ export default function InvoicePrint() {
             <TableBody>
               {lineRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-sm text-muted-foreground">No items</TableCell>
+                  <TableCell colSpan={7} className="text-sm">No items</TableCell>
                 </TableRow>
               ) : (
                 lineRows.map((r) => {
@@ -301,7 +293,7 @@ export default function InvoicePrint() {
                     <TableRow key={r.idx}>
                       <TableCell>{r.idx}</TableCell>
                       <TableCell className="font-medium">{r.name}</TableCell>
-                      <TableCell className="text-right">{r.qty.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                      <TableCell className="text-right">{r.qty.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                       <TableCell>{r.unit}</TableCell>
                       <TableCell className="text-right">{formatMoney(r.rate)}</TableCell>
                       <TableCell className="text-right">{taxPercentLabel || "0%"}</TableCell>
@@ -313,52 +305,54 @@ export default function InvoicePrint() {
             </TableBody>
           </Table>
 
-          <Separator className="my-4" />
+          <Separator className="my-4 bg-black" />
 
-          <div className="text-xs font-semibold tracking-wide">TAX SUMMARY</div>
-          <div className="mt-2 rounded-lg border border-border/60 overflow-hidden">
-            <Table className="text-sm">
-              <TableHeader className="bg-muted/30 print:bg-transparent">
-                <TableRow>
-                  <TableHead>Tax Rate</TableHead>
-                  <TableHead className="text-right">Taxable Amt</TableHead>
-                  <TableHead className="text-right">Tax Amt</TableHead>
-                  <TableHead className="text-right">Total Amt</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {taxSummaryRows.map((r, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell>{r.rate}</TableCell>
-                    <TableCell className="text-right">{formatMoney(r.taxable)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(r.tax)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(r.total)}</TableCell>
-                  </TableRow>
-                ))}
-                <TableRow>
-                  <TableCell className="font-semibold">Totals</TableCell>
-                  <TableCell className="text-right font-semibold">{formatMoney(subtotal)}</TableCell>
-                  <TableCell className="text-right font-semibold">{formatMoney(taxAmount)}</TableCell>
-                  <TableCell className="text-right font-semibold">{formatMoney(total)}</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+          <div className="mt-1 border border-black p-2">
+            <div className="text-xs font-bold uppercase">TAX SUMMARY</div>
+            <div className="mt-2">
+              <table className="w-full border-collapse border border-black text-[11px]">
+                <thead>
+                  <tr>
+                    <th className="border border-black px-2 py-1 text-left font-bold">Tax Rate</th>
+                    <th className="border border-black px-2 py-1 text-right font-bold">Taxable Amt</th>
+                    <th className="border border-black px-2 py-1 text-right font-bold">Tax Amt</th>
+                    <th className="border border-black px-2 py-1 text-right font-bold">Total Amt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {taxSummaryRows.map((r, idx) => (
+                    <tr key={idx}>
+                      <td className="border border-black px-2 py-1">{r.rate}</td>
+                      <td className="border border-black px-2 py-1 text-right">{formatMoney(r.taxable)}</td>
+                      <td className="border border-black px-2 py-1 text-right">{formatMoney(r.tax)}</td>
+                      <td className="border border-black px-2 py-1 text-right">{formatMoney(r.total)}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td className="border border-black px-2 py-1 font-bold">Totals</td>
+                    <td className="border border-black px-2 py-1 text-right font-bold">{formatMoney(subtotal)}</td>
+                    <td className="border border-black px-2 py-1 text-right font-bold">{formatMoney(taxAmount)}</td>
+                    <td className="border border-black px-2 py-1 text-right font-bold">{formatMoney(total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {invoice.notes ? (
             <>
-              <Separator className="my-4" />
+              <Separator className="my-4 bg-black" />
               <div className="text-xs font-semibold tracking-wide">NOTES</div>
               <div className="mt-2 text-sm whitespace-pre-wrap">{invoice.notes}</div>
             </>
           ) : null}
 
-          <Separator className="my-4" />
-          <div className="text-xs text-muted-foreground print:text-black/70 space-y-1">
+          <Separator className="my-4 bg-black" />
+          <div className="text-xs space-y-1">
             <div>This invoice was generated on {formatDateTimeWithSeconds(printedAt)}</div>
             <div>{SYSTEM_NAME}</div>
           </div>
-        </Card>
+        </div>
       </div>
     </div>
   );

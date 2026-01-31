@@ -9,6 +9,8 @@ import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { ArrowLeft, Printer } from "lucide-react";
 
+const COMPANY_NAME = "Sentiment Pharma";
+
 type InvoiceLineItem = {
   processedInventoryId?: string;
   name: string;
@@ -151,42 +153,55 @@ export default function InvoicePrint() {
         </div>
 
         <Card className="p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-xl font-semibold">Invoice</div>
-              <div className="text-sm text-muted-foreground">Printable summary</div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm text-muted-foreground">System Invoice No</div>
-              <div className="font-semibold">{invoice.invoiceNo || "—"}</div>
-              <div className="mt-2 text-sm text-muted-foreground">Manual Invoice No</div>
-              <div className="font-medium">{invoice.manualInvoiceNo || "—"}</div>
-            </div>
+          <div className="text-center">
+            <div className="text-2xl font-extrabold tracking-wide">{COMPANY_NAME}</div>
+            <div className="text-sm font-semibold">INVOICE</div>
           </div>
 
           <Separator className="my-4" />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <div className="text-sm text-muted-foreground">Customer</div>
-              <div className="font-medium">{invoice.partyName || "—"}</div>
-              <div className="mt-2 text-sm text-muted-foreground">GST</div>
-              <div className="text-sm">{invoice.customer?.gst || "—"}</div>
+            <div className="space-y-2">
+              <div>
+                <div className="text-xs text-muted-foreground">Bill To</div>
+                <div className="text-base font-semibold">{invoice.partyName || "—"}</div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-1 text-sm">
+                <div>
+                  <span className="text-muted-foreground">GST:</span> {invoice.customer?.gst || "—"}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Phone:</span> {invoice.customer?.phone || "—"}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Email:</span> {invoice.customer?.email || "—"}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground">Address</div>
+                <div className="text-sm whitespace-pre-wrap">{invoice.customer?.address || "—"}</div>
+              </div>
             </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Issue Date</div>
-              <div className="text-sm">{invoice.issueDate || "—"}</div>
-              <div className="mt-2 text-sm text-muted-foreground">Status</div>
-              <div className="text-sm">{invoice.status || "—"}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Address</div>
-              <div className="text-sm whitespace-pre-wrap">{invoice.customer?.address || "—"}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Contact</div>
-              <div className="text-sm">{invoice.customer?.phone || "—"}</div>
-              <div className="text-sm">{invoice.customer?.email || "—"}</div>
+
+            <div className="space-y-2 md:text-right">
+              <div>
+                <div className="text-xs text-muted-foreground">System Invoice No</div>
+                <div className="text-base font-semibold">{invoice.invoiceNo || "—"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Manual Invoice No</div>
+                <div className="text-sm font-medium">{invoice.manualInvoiceNo || "—"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Issue Date</div>
+                <div className="text-sm">{invoice.issueDate || "—"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Status</div>
+                <div className="text-sm">{invoice.status || "—"}</div>
+              </div>
             </div>
           </div>
 

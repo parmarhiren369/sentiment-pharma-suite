@@ -463,13 +463,11 @@ export default function Invoices() {
           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <Button
               variant="outline"
-              size="sm"
-              className="gap-1"
+              size="icon"
               onClick={() => window.open(`/invoices/${i.id}/print`, "_blank", "noopener,noreferrer")}
               title="Print"
             >
               <Printer className="w-4 h-4" />
-              Print
             </Button>
             <Button variant="outline" size="sm" className="gap-1" onClick={() => openEdit(i)}>
               <Pencil className="w-4 h-4" />

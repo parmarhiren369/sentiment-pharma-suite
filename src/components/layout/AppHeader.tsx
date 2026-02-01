@@ -35,7 +35,7 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
 
         <div className="flex items-center gap-3 pl-4 border-l border-border">
           <div className="text-right">
-            <p className="text-sm font-medium text-foreground">Admin Users</p>
+            <p className="text-sm font-medium text-foreground">Admin User</p>
             <p className="text-xs text-muted-foreground">Manager</p>
           </div>
           <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">

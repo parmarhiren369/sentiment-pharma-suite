@@ -22,7 +22,7 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { ArrowUpRight, Clock, HandCoins, Plus, RefreshCw, Users, Wallet } from "lucide-react";
+import { ArrowUpRight, Clock, HandCoins, Plus, Printer, RefreshCw, Users, Wallet } from "lucide-react";
 
 type PaymentDirection = "In" | "Out";
 type PaymentMethod = "Cash" | "UPI" | "Bank" | "Card" | "Cheque";
@@ -642,23 +642,52 @@ export default function Payments() {
             const dueLabel = activePartyType === "customer" ? "To Receive" : "To Pay";
             const txRows = isOpen ? buildPartyTransactions(p) : [];
 
-            const MetricButton = ({ label, value, valueClassName }: { label: string; value: string; valueClassName?: string }) => (
+            const accentClass =
+              p.overdueOutstanding > 0
+                ? "border-l-red-500"
+                : p.outstanding > 0
+                  ? "border-l-amber-500"
+                  : p.advance > 0
+                    ? "border-l-green-500"
+                    : "border-l-transparent";
+
+            const MetricButton = ({
+              label,
+              value,
+              valueClassName,
+            }: {
+              label: string;
+              value: string;
+              valueClassName?: string;
+            }) => (
               <Button
                 type="button"
-                variant="ghost"
-                className="h-auto px-2 py-1 justify-start"
+                variant="outline"
+                size="sm"
+                className="h-auto rounded-full px-3 py-2 justify-start bg-background/60 hover:bg-accent/60"
                 onClick={() => toggleParty(p.id)}
               >
                 <span className="text-xs text-muted-foreground mr-2">{label}</span>
-                <span className={`text-sm font-medium ${valueClassName || ""}`}>{value}</span>
+                <span className={`text-sm font-semibold tabular-nums ${valueClassName || ""}`}>{value}</span>
               </Button>
             );
 
             return (
-              <Card key={p.id} className="p-4">
-                <div className="flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
+              <Card key={p.id} className={`p-4 border-l-4 ${accentClass} hover:shadow-sm transition-shadow`}>
+                <div className="flex flex-col lg:flex-row lg:items-start gap-3 justify-between">
                   <div className="min-w-0">
-                    <div className="font-bold text-base truncate">{p.name}</div>
+                    <div className="flex items-start gap-2">
+                      <div className="font-extrabold tracking-wide uppercase text-base sm:text-lg leading-tight truncate">{p.name}</div>
+                      {p.overdueOutstanding > 0 ? (
+                        <span className="shrink-0 rounded-full bg-destructive/10 text-destructive text-[11px] px-2 py-0.5 font-semibold">
+                          OVERDUE
+                        </span>
+                      ) : p.advance > 0 ? (
+                        <span className="shrink-0 rounded-full bg-success/10 text-success text-[11px] px-2 py-0.5 font-semibold">
+                          ADVANCE
+                        </span>
+                      ) : null}
+                    </div>
                     <div className="flex flex-wrap items-center gap-2 mt-2">
                       <MetricButton label="Total invoiced:" value={rupees(p.totalInvoiced)} />
                       <MetricButton label={`${settledLabel}:`} value={rupees(p.settled)} valueClassName={activePartyType === "customer" ? "text-success" : ""} />
@@ -669,7 +698,7 @@ export default function Payments() {
 
                   <div className="flex items-center gap-2 justify-end">
                     <Button variant="outline" className="gap-2" onClick={() => printPartyStatement(p)}>
-                      <ArrowUpRight className="w-4 h-4" />
+                      <Printer className="w-4 h-4" />
                       Print
                     </Button>
                     <Button className="gap-2" onClick={() => openAddForParty(activePartyType, p.id, p.name)}>

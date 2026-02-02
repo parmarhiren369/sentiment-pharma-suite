@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
-import { DataTable } from "@/components/tables/DataTable";
-import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
@@ -23,7 +22,7 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { ArrowDownRight, ArrowUpRight, CreditCard, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Clock, CreditCard, HandCoins, Plus, RefreshCw, Users, Wallet } from "lucide-react";
 
 type PaymentDirection = "In" | "Out";
 type PaymentMethod = "Cash" | "UPI" | "Bank" | "Card" | "Cheque";
@@ -49,6 +48,37 @@ interface PartyOption {
   name: string;
 }
 
+type PartyType = "customer" | "supplier";
+
+type InvoiceStatus = string;
+
+interface InvoiceRecord {
+  id: string;
+  invoiceNo: string;
+  partyType: PartyType;
+  partyId: string;
+  partyName: string;
+  issueDate: string;
+  dueDate?: string;
+  total: number;
+  status?: InvoiceStatus;
+}
+
+type NoteType = "Debit" | "Credit";
+
+interface NoteRecord {
+  id: string;
+  noteType: NoteType;
+  noteNo: string;
+  date: string;
+  partyType: PartyType;
+  partyId: string;
+  partyName: string;
+  amount: number;
+  relatedInvoiceNo?: string;
+  reason?: string;
+}
+
 const defaultFormState = {
   date: new Date().toISOString().slice(0, 10),
   direction: "In" as PaymentDirection,
@@ -71,8 +101,13 @@ export default function Payments() {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [customers, setCustomers] = useState<PartyOption[]>([]);
   const [suppliers, setSuppliers] = useState<PartyOption[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
+  const [notes, setNotes] = useState<NoteRecord[]>([]);
 
-  const [search, setSearch] = useState("");
+  const [activePartyType, setActivePartyType] = useState<PartyType>("customer");
+  const [partySearch, setPartySearch] = useState("");
+  const [openPartyId, setOpenPartyId] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -93,44 +128,82 @@ export default function Payments() {
     return partyOptions.find((p) => p.id === formData.partyId);
   }, [formData.partyId, formData.partyName, formData.partyType, partyOptions]);
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return payments;
-    const q = search.toLowerCase();
-    return payments.filter((p) =>
-      `${p.partyName ?? ""} ${p.reference} ${p.method} ${p.status}`.toLowerCase().includes(q)
-    );
-  }, [payments, search]);
+  const rupees = (n: number): string => {
+    const value = Number.isFinite(n) ? n : 0;
+    return `₹${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
-  const stats = useMemo(() => {
-    const received = payments
-      .filter((p) => p.direction === "In")
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
-    const paid = payments
-      .filter((p) => p.direction === "Out")
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
+  const isOverdueInvoice = (inv: InvoiceRecord): boolean => {
+    if ((inv.status || "").toLowerCase() === "paid") return false;
+    if ((inv.status || "").toLowerCase() === "overdue") return true;
+    if (!inv.dueDate) return false;
+    const due = new Date(inv.dueDate);
+    if (Number.isNaN(due.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+    return due < today;
+  };
 
-    return {
-      total: payments.length,
-      received,
-      paid,
-      net: received - paid,
-    };
-  }, [payments]);
+  const activeParties = useMemo(() => (activePartyType === "customer" ? customers : suppliers), [activePartyType, customers, suppliers]);
 
-  const exportRows = useMemo(
-    () =>
-      filtered.map((p) => ({
-        Date: p.date,
-        Direction: p.direction,
-        Amount: p.amount,
-        Party: p.partyName || "",
-        Method: p.method,
-        Status: p.status,
-        Reference: p.reference,
-        Notes: p.notes || "",
-      })),
-    [filtered]
-  );
+  const partySummaries = useMemo(() => {
+    const completedPayments = payments.filter((p) => p.status === "Completed");
+    return activeParties
+      .map((p) => {
+        const partyInvoices = invoices.filter((x) => x.partyType === activePartyType && x.partyId === p.id);
+        const partyNotes = notes.filter((x) => x.partyType === activePartyType && x.partyId === p.id);
+        const partyPayments = completedPayments.filter((x) => x.partyType === activePartyType && x.partyId === p.id);
+
+        const totalInvoiced = partyInvoices.reduce((sum, x) => sum + (x.total || 0), 0);
+
+        const creditAdjustments = partyNotes.filter((n) => n.noteType === "Credit").reduce((sum, n) => sum + (n.amount || 0), 0);
+        const debitAdjustments = partyNotes.filter((n) => n.noteType === "Debit").reduce((sum, n) => sum + (n.amount || 0), 0);
+
+        const settledDirection: PaymentDirection = activePartyType === "customer" ? "In" : "Out";
+        const settled = partyPayments
+          .filter((x) => x.direction === settledDirection)
+          .reduce((sum, x) => sum + (x.amount || 0), 0);
+
+        const balance = totalInvoiced + debitAdjustments - creditAdjustments - settled;
+        const outstanding = Math.max(0, balance);
+        const advance = Math.max(0, -balance);
+
+        const overdueInvoicesTotal = partyInvoices.filter(isOverdueInvoice).reduce((sum, x) => sum + (x.total || 0), 0);
+        const overdueOutstanding = Math.min(outstanding, overdueInvoicesTotal);
+
+        return {
+          id: p.id,
+          name: p.name,
+          totalInvoiced,
+          settled,
+          creditAdjustments,
+          debitAdjustments,
+          balance,
+          outstanding,
+          advance,
+          overdueOutstanding,
+          invoices: partyInvoices,
+          notes: partyNotes,
+          payments: partyPayments,
+        };
+      })
+      .filter((x) => x.name);
+  }, [activeParties, activePartyType, invoices, notes, payments]);
+
+  const topStats = useMemo(() => {
+    const totalOutstanding = partySummaries.reduce((sum, x) => sum + x.outstanding, 0);
+    const overdueAmount = partySummaries.reduce((sum, x) => sum + x.overdueOutstanding, 0);
+    const advancePayments = partySummaries.reduce((sum, x) => sum + x.advance, 0);
+    const activeCount = partySummaries.filter((x) => x.totalInvoiced > 0 || x.settled > 0 || x.creditAdjustments > 0 || x.debitAdjustments > 0).length;
+    return { totalOutstanding, overdueAmount, advancePayments, activeCount };
+  }, [partySummaries]);
+
+  const visiblePartySummaries = useMemo(() => {
+    if (!partySearch.trim()) return partySummaries;
+    const q = partySearch.toLowerCase();
+    return partySummaries.filter((p) => p.name.toLowerCase().includes(q));
+  }, [partySearch, partySummaries]);
 
   const fetchParties = async () => {
     const [customersSnap, suppliersSnap] = await Promise.all([
@@ -175,6 +248,51 @@ export default function Payments() {
     setPayments(list);
   };
 
+  const fetchInvoices = async () => {
+    const qy = query(collection(db, "invoices"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(qy);
+    const list = snap.docs
+      .map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          invoiceNo: (data.invoiceNo || "").toString(),
+          partyType: ((data.partyType || "customer") as PartyType) || "customer",
+          partyId: (data.partyId || "").toString(),
+          partyName: (data.partyName || "").toString(),
+          issueDate: (data.issueDate || "").toString(),
+          dueDate: (data.dueDate || "").toString() || undefined,
+          total: typeof data.total === "number" ? data.total : parseFloat(data.total) || 0,
+          status: (data.status || "").toString() || undefined,
+        } as InvoiceRecord;
+      })
+      .filter((x) => x.invoiceNo && x.partyId);
+    setInvoices(list);
+  };
+
+  const fetchNotes = async () => {
+    const qy = query(collection(db, "debitCreditNotes"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(qy);
+    const list = snap.docs
+      .map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          noteType: (data.noteType || "Debit") as NoteType,
+          noteNo: (data.noteNo || "").toString(),
+          date: (data.date || "").toString(),
+          partyType: (data.partyType || "customer") as PartyType,
+          partyId: (data.partyId || "").toString(),
+          partyName: (data.partyName || "").toString(),
+          amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
+          relatedInvoiceNo: (data.relatedInvoiceNo || "").toString() || undefined,
+          reason: (data.reason || "").toString() || undefined,
+        } as NoteRecord;
+      })
+      .filter((x) => x.noteNo && x.partyId);
+    setNotes(list);
+  };
+
   const fetchAll = async () => {
     if (!db) {
       toast({
@@ -187,12 +305,12 @@ export default function Payments() {
 
     setIsLoading(true);
     try {
-      await Promise.all([fetchParties(), fetchPayments()]);
+      await Promise.all([fetchParties(), fetchPayments(), fetchInvoices(), fetchNotes()]);
     } catch (error) {
       console.error("Error fetching payments", error);
       toast({
         title: "Load failed",
-        description: "Could not load payments from Firestore.",
+        description: "Could not load payments/invoices/notes from Firestore.",
         variant: "destructive",
       });
     } finally {
@@ -215,6 +333,121 @@ export default function Payments() {
   const openAdd = () => {
     resetForm();
     setIsDialogOpen(true);
+  };
+
+  const openAddForParty = (partyType: PartyType, partyId: string, partyName: string) => {
+    resetForm();
+    setFormData((s) => ({
+      ...s,
+      partyType,
+      partyId,
+      partyName,
+      direction: partyType === "customer" ? "In" : "Out",
+    }));
+    setIsDialogOpen(true);
+  };
+
+  const toggleParty = (partyId: string) => {
+    setOpenPartyId((cur) => (cur === partyId ? null : partyId));
+  };
+
+  const buildPartyTransactions = (summary: (typeof partySummaries)[number]) => {
+    type TxRow = { date: string; kind: string; ref: string; amount: number };
+    const rows: TxRow[] = [];
+
+    for (const inv of summary.invoices) {
+      rows.push({
+        date: inv.issueDate || inv.dueDate || "",
+        kind: "Invoice",
+        ref: inv.invoiceNo,
+        amount: Number(inv.total) || 0,
+      });
+    }
+
+    for (const n of summary.notes) {
+      const sign = n.noteType === "Debit" ? 1 : -1;
+      rows.push({
+        date: n.date || "",
+        kind: n.noteType === "Debit" ? "Debit Note" : "Credit Note",
+        ref: n.noteNo || n.relatedInvoiceNo || "",
+        amount: (Number(n.amount) || 0) * sign,
+      });
+    }
+
+    for (const p of summary.payments) {
+      const sign =
+        activePartyType === "customer"
+          ? p.direction === "In"
+            ? -1
+            : 1
+          : p.direction === "Out"
+            ? -1
+            : 1;
+      rows.push({
+        date: p.date || "",
+        kind: p.direction === "In" ? "Payment In" : "Payment Out",
+        ref: p.reference || p.method,
+        amount: (Number(p.amount) || 0) * sign,
+      });
+    }
+
+    rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    return rows;
+  };
+
+  const printPartyStatement = (summary: (typeof partySummaries)[number]) => {
+    const rows = buildPartyTransactions(summary);
+
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Statement - ${summary.name}</title>
+          <style>
+            body{font-family:Arial, Helvetica, sans-serif; padding:24px;}
+            h1{font-size:18px; margin:0 0 8px;}
+            .muted{color:#555; font-size:12px; margin-bottom:16px;}
+            .kpi{display:flex; gap:16px; font-size:12px; margin:12px 0 18px;}
+            .kpi div{border:1px solid #ddd; padding:8px 10px; border-radius:8px;}
+            table{width:100%; border-collapse:collapse;}
+            th,td{border:1px solid #ddd; padding:8px; font-size:12px;}
+            th{text-align:left; background:#f6f6f6;}
+            td.num{text-align:right;}
+          </style>
+        </head>
+        <body>
+          <h1>${summary.name} — Statement</h1>
+          <div class="muted">Generated on ${new Date().toLocaleString()}</div>
+          <div class="kpi">
+            <div><b>Total invoiced</b><br/>${rupees(summary.totalInvoiced)}</div>
+            <div><b>Settled</b><br/>${rupees(summary.settled)}</div>
+            <div><b>Adjustments (Credit)</b><br/>${rupees(summary.creditAdjustments)}</div>
+            <div><b>Balance</b><br/>${rupees(summary.balance)}</div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Date</th><th>Type</th><th>Reference</th><th class="num">Amount</th></tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map((r) => `<tr><td>${r.date || "—"}</td><td>${r.kind}</td><td>${r.ref || "—"}</td><td class="num">${rupees(r.amount)}</td></tr>`)
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const w = window.open("", "_blank", "noopener,noreferrer");
+    if (!w) {
+      toast({ title: "Popup blocked", description: "Please allow popups to print the statement." });
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
   };
 
   const openEdit = (row: PaymentRecord) => {
@@ -322,47 +555,6 @@ export default function Payments() {
     }
   };
 
-  const columns = useMemo(
-    () => [
-      { key: "date", header: "Date" },
-      {
-        key: "direction",
-        header: "Direction",
-        render: (p: PaymentRecord) => (
-          <span className={p.direction === "In" ? "text-success font-medium" : "text-destructive font-medium"}>
-            {p.direction === "In" ? "Received" : "Paid"}
-          </span>
-        ),
-      },
-      {
-        key: "amount",
-        header: "Amount",
-        render: (p: PaymentRecord) => <span className="font-medium">₹{(p.amount || 0).toLocaleString("en-IN")}</span>,
-      },
-      { key: "partyName", header: "Party" },
-      { key: "method", header: "Method" },
-      { key: "status", header: "Status" },
-      { key: "reference", header: "Reference" },
-      {
-        key: "actions",
-        header: "Actions",
-        render: (p: PaymentRecord) => (
-          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-            <Button variant="outline" size="sm" className="gap-1" onClick={() => openEdit(p)}>
-              <Pencil className="w-4 h-4" />
-              Edit
-            </Button>
-            <Button variant="destructive" size="sm" className="gap-1" onClick={() => handleDelete(p.id)}>
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </Button>
-          </div>
-        ),
-      },
-    ],
-    []
-  );
-
   return (
     <>
       <AppHeader title="Payments" subtitle="Track payments received and paid" />
@@ -370,51 +562,75 @@ export default function Payments() {
       <div className="flex-1 overflow-auto p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
-            title="Total"
-            value={stats.total.toString()}
-            change={"All payments"}
+            title="Total outstanding"
+            value={rupees(topStats.totalOutstanding)}
+            change={activePartyType === "customer" ? "To receive" : "To pay"}
             changeType="neutral"
-            icon={CreditCard}
-            iconBgColor="bg-primary/20"
-            iconColor="text-primary"
+            icon={Wallet}
+            iconBgColor="bg-warning/20"
+            iconColor="text-warning"
           />
           <StatCard
-            title="Received"
-            value={`₹${stats.received.toLocaleString("en-IN")}`}
-            change={""}
-            changeType="positive"
-            icon={ArrowUpRight}
-            iconBgColor="bg-success/20"
-            iconColor="text-success"
-          />
-          <StatCard
-            title="Paid"
-            value={`₹${stats.paid.toLocaleString("en-IN")}`}
-            change={""}
+            title="Overdue amount"
+            value={rupees(topStats.overdueAmount)}
+            change={"Past due"}
             changeType="negative"
-            icon={ArrowDownRight}
+            icon={Clock}
             iconBgColor="bg-destructive/20"
             iconColor="text-destructive"
           />
           <StatCard
-            title="Net"
-            value={`₹${stats.net.toLocaleString("en-IN")}`}
-            change={stats.net >= 0 ? "Net received" : "Net paid"}
-            changeType={stats.net >= 0 ? "positive" : "negative"}
-            icon={CreditCard}
-            iconBgColor="bg-secondary"
-            iconColor="text-foreground"
+            title="Advance payments"
+            value={rupees(topStats.advancePayments)}
+            change={"Extra paid"}
+            changeType="positive"
+            icon={HandCoins}
+            iconBgColor="bg-success/20"
+            iconColor="text-success"
+          />
+          <StatCard
+            title="Active parties"
+            value={topStats.activeCount.toString()}
+            change={activePartyType === "customer" ? "Customers" : "Suppliers"}
+            changeType="neutral"
+            icon={Users}
+            iconBgColor="bg-primary/20"
+            iconColor="text-primary"
           />
         </div>
 
         <Card className="p-4 mb-4">
-          <div className="flex flex-col md:flex-row md:items-center gap-3 justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="flex gap-2">
+                <Button
+                  size="lg"
+                  variant={activePartyType === "customer" ? "default" : "outline"}
+                  className="flex-1 sm:flex-none"
+                  onClick={() => {
+                    setActivePartyType("customer");
+                    setOpenPartyId(null);
+                  }}
+                >
+                  Customers
+                </Button>
+                <Button
+                  size="lg"
+                  variant={activePartyType === "supplier" ? "default" : "outline"}
+                  className="flex-1 sm:flex-none"
+                  onClick={() => {
+                    setActivePartyType("supplier");
+                    setOpenPartyId(null);
+                  }}
+                >
+                  Suppliers
+                </Button>
+              </div>
               <Input
-                placeholder="Search party, method, reference..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full md:w-96"
+                placeholder={activePartyType === "customer" ? "Search customers..." : "Search suppliers..."}
+                value={partySearch}
+                onChange={(e) => setPartySearch(e.target.value)}
+                className="w-full sm:w-80"
               />
               <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
                 <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
@@ -422,8 +638,7 @@ export default function Payments() {
               </Button>
             </div>
 
-            <div className="flex items-center gap-2">
-              <ExportExcelButton rows={exportRows} fileName="payments" sheetName="Payments" label="Export" variant="outline" />
+            <div className="flex items-center justify-end">
               <Button className="gap-2" onClick={openAdd}>
                 <Plus className="w-4 h-4" />
                 Add Payment
@@ -432,10 +647,95 @@ export default function Payments() {
           </div>
         </Card>
 
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
-          <div className="p-4">
-            <DataTable data={filtered} columns={columns} keyField="id" onRowClick={openEdit} />
-          </div>
+        <div className="space-y-3">
+          {visiblePartySummaries.map((p) => {
+            const isOpen = openPartyId === p.id;
+            const settledLabel = activePartyType === "customer" ? "Received" : "Paid";
+            const dueLabel = activePartyType === "customer" ? "To Receive" : "To Pay";
+            const txRows = isOpen ? buildPartyTransactions(p) : [];
+
+            const MetricButton = ({ label, value }: { label: string; value: string }) => (
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto px-2 py-1 justify-start"
+                onClick={() => toggleParty(p.id)}
+              >
+                <span className="text-xs text-muted-foreground mr-2">{label}</span>
+                <span className="text-sm font-medium">{value}</span>
+              </Button>
+            );
+
+            return (
+              <Card key={p.id} className="p-4">
+                <div className="flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
+                  <div className="min-w-0">
+                    <div className="font-bold text-base truncate">{p.name}</div>
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <MetricButton label="Total invoiced:" value={rupees(p.totalInvoiced)} />
+                      <MetricButton label={`${settledLabel}:`} value={rupees(p.settled)} />
+                      <MetricButton label="Return/ Adjustments:" value={rupees(p.creditAdjustments)} />
+                      <MetricButton label={`${dueLabel}:`} value={rupees(p.outstanding)} />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 justify-end">
+                    <Button variant="outline" className="gap-2" onClick={() => printPartyStatement(p)}>
+                      <ArrowUpRight className="w-4 h-4" />
+                      Print
+                    </Button>
+                    <Button className="gap-2" onClick={() => openAddForParty(activePartyType, p.id, p.name)}>
+                      <Plus className="w-4 h-4" />
+                      Add payment
+                    </Button>
+                  </div>
+                </div>
+
+                {isOpen ? (
+                  <div className="mt-4 rounded-md border overflow-x-auto">
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b bg-muted/30">
+                      <div className="text-sm font-medium">Transaction history</div>
+                      <div className="text-xs text-muted-foreground">Balance: {rupees(p.balance)}</div>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[120px]">Date</TableHead>
+                          <TableHead className="w-[140px]">Type</TableHead>
+                          <TableHead>Reference</TableHead>
+                          <TableHead className="w-[140px] text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {txRows.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-muted-foreground">
+                              No transactions found.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          txRows.map((r, i) => (
+                            <TableRow key={i}>
+                              <TableCell>{r.date || "—"}</TableCell>
+                              <TableCell>{r.kind}</TableCell>
+                              <TableCell className="truncate max-w-[520px]">{r.ref || "—"}</TableCell>
+                              <TableCell className={`text-right font-medium ${r.amount >= 0 ? "text-foreground" : "text-success"}`}>
+                                {rupees(r.amount)}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : null}
+              </Card>
+            );
+          })}
+
+          {visiblePartySummaries.length === 0 ? (
+            <Card className="p-6 text-sm text-muted-foreground">No parties found.</Card>
+          ) : null}
         </div>
       </div>
 
@@ -571,14 +871,10 @@ export default function Payments() {
             </div>
 
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setIsDialogOpen(false);
-                  resetForm();
-                }}
-              >
+              <Button type="button" variant="outline" onClick={() => {
+                setIsDialogOpen(false);
+                resetForm();
+              }}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>

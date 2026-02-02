@@ -42,6 +42,8 @@ import {
   Users,
 } from "lucide-react";
 
+type InvoiceTxStatus = "Paid" | "Partially Paid" | "Unpaid";
+
 type PaymentDirection = "In" | "Out";
 type PaymentMethod = "Cash" | "UPI" | "Bank" | "Card" | "Cheque";
 type PaymentStatus = "Completed" | "Pending" | "Failed";
@@ -389,6 +391,60 @@ export default function Payments() {
 
   const toggleParty = (partyId: string) => {
     setOpenPartyId((cur) => (cur === partyId ? null : partyId));
+  };
+
+  const buildPartyInvoiceHistoryRows = (summary: (typeof partySummaries)[number]) => {
+    type InvoiceHistoryRow = {
+      invoiceId: string;
+      date: string;
+      type: string;
+      invoiceNo: string;
+      amountPaid: number;
+      amountRemaining: number;
+      totalAmount: number;
+      status: InvoiceTxStatus;
+    };
+
+    const byDateAsc = [...summary.invoices].sort((a, b) => (a.issueDate || "").localeCompare(b.issueDate || ""));
+
+    const notesByInvoiceNo = new Map<string, { debit: number; credit: number }>();
+    for (const n of summary.notes) {
+      const invNo = (n.relatedInvoiceNo || "").trim();
+      if (!invNo) continue;
+      const cur = notesByInvoiceNo.get(invNo) || { debit: 0, credit: 0 };
+      if (n.noteType === "Debit") cur.debit += Number(n.amount) || 0;
+      else cur.credit += Number(n.amount) || 0;
+      notesByInvoiceNo.set(invNo, cur);
+    }
+
+    // Allocate total settled amount across invoices (FIFO) when payments are not linked to specific invoices.
+    let remainingToAllocate = Number(summary.settled) || 0;
+
+    return byDateAsc.map((inv) => {
+      const invoiceNo = (inv.invoiceNo || "").toString();
+      const noteAdjust = notesByInvoiceNo.get(invoiceNo) || { debit: 0, credit: 0 };
+      const baseTotal = Number(inv.total) || 0;
+      const adjustedTotal = Math.max(0, baseTotal + noteAdjust.debit - noteAdjust.credit);
+
+      const paid = Math.min(adjustedTotal, Math.max(0, remainingToAllocate));
+      remainingToAllocate = Math.max(0, remainingToAllocate - paid);
+
+      const amountRemaining = Math.max(0, adjustedTotal - paid);
+      const status: InvoiceTxStatus = amountRemaining <= 0 ? "Paid" : paid > 0 ? "Partially Paid" : "Unpaid";
+
+      const typeLabel = activePartyType === "customer" ? "Invoice (Sale)" : "Invoice (Purchase)";
+
+      return {
+        invoiceId: inv.id,
+        date: inv.issueDate || inv.dueDate || "",
+        type: typeLabel,
+        invoiceNo,
+        amountPaid: paid,
+        amountRemaining,
+        totalAmount: adjustedTotal,
+        status,
+      } as InvoiceHistoryRow;
+    });
   };
 
   const buildPartyTransactions = (summary: (typeof partySummaries)[number]) => {
@@ -760,7 +816,7 @@ export default function Payments() {
             const isOpen = openPartyId === p.id;
             const settledLabel = activePartyType === "customer" ? "Received" : "Paid";
             const dueLabel = activePartyType === "customer" ? "To Receive" : "To Pay";
-            const txRows = isOpen ? buildPartyTransactions(p) : [];
+            const invoiceRows = isOpen ? buildPartyInvoiceHistoryRows(p) : [];
 
             const accentClass =
               p.overdueOutstanding > 0
@@ -778,16 +834,23 @@ export default function Payments() {
 
             return (
               <div key={p.id} className={`px-4 py-4 border-l-4 ${accentClass}`}>
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleParty(p.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      toggleParty(p.id);
+                    }
+                  }}
+                  className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between cursor-pointer select-none rounded-lg -mx-2 px-2 py-1 hover:bg-muted/20 focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-label={isOpen ? "Collapse" : "Expand"}
+                >
                   <div className="flex items-start gap-3 min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => toggleParty(p.id)}
-                      className="mt-1 h-8 w-8 rounded-lg border bg-background hover:bg-muted/30 flex items-center justify-center shrink-0"
-                      aria-label={isOpen ? "Collapse" : "Expand"}
-                    >
+                    <div className="mt-1 h-8 w-8 rounded-lg border bg-background flex items-center justify-center shrink-0">
                       <ChevronRight className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`} />
-                    </button>
+                    </div>
 
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -839,6 +902,7 @@ export default function Payments() {
                         <Button
                           type="button"
                           className="gap-2 bg-slate-700 text-white hover:bg-slate-800"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           <Printer className="h-4 w-4" />
                           Print
@@ -846,7 +910,12 @@ export default function Payments() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => printPartyStatement(p)}>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            printPartyStatement(p);
+                          }}
+                        >
                           Print statement
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -855,7 +924,10 @@ export default function Payments() {
                     <Button
                       type="button"
                       className="gap-2 bg-emerald-600 hover:bg-emerald-700"
-                      onClick={() => openAddForParty(activePartyType, p.id, p.name)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openAddForParty(activePartyType, p.id, p.name);
+                      }}
                     >
                       <Plus className="h-4 w-4" />
                       Add Payment
@@ -866,33 +938,78 @@ export default function Payments() {
                 {isOpen ? (
                   <div className="mt-4 rounded-md border overflow-x-auto bg-background">
                     <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b bg-muted/20">
-                      <div className="text-sm font-medium">Transaction history</div>
+                      <div className="text-sm font-medium">Transaction History</div>
                       <div className="text-xs text-muted-foreground">Balance: {money(p.balance)}</div>
                     </div>
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-[120px]">Date</TableHead>
-                          <TableHead className="w-[140px]">Type</TableHead>
-                          <TableHead>Reference</TableHead>
-                          <TableHead className="w-[140px] text-right">Amount</TableHead>
+                          <TableHead className="w-[160px]">Type</TableHead>
+                          <TableHead className="w-[180px]">Invoice Number</TableHead>
+                          <TableHead className="w-[170px] text-right">Amount Paid Till Now</TableHead>
+                          <TableHead className="w-[170px] text-right">Amount Remaining</TableHead>
+                          <TableHead className="w-[140px] text-right">Total Amount</TableHead>
+                          <TableHead className="w-[140px]">Status</TableHead>
+                          <TableHead className="w-[160px] text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {txRows.length === 0 ? (
+                        {invoiceRows.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={4} className="text-muted-foreground">
+                            <TableCell colSpan={8} className="text-muted-foreground">
                               No transactions found.
                             </TableCell>
                           </TableRow>
                         ) : (
-                          txRows.map((r, i) => (
-                            <TableRow key={i}>
+                          invoiceRows.map((r) => (
+                            <TableRow key={r.invoiceId}>
                               <TableCell>{r.date || "—"}</TableCell>
-                              <TableCell>{r.kind}</TableCell>
-                              <TableCell className="truncate max-w-[520px]">{r.ref || "—"}</TableCell>
-                              <TableCell className={`text-right font-medium ${r.amount >= 0 ? "text-foreground" : "text-emerald-700"}`}>
-                                {money(r.amount)}
+                              <TableCell>{r.type}</TableCell>
+                              <TableCell className="font-medium">{r.invoiceNo || "—"}</TableCell>
+                              <TableCell className="text-right font-medium text-emerald-700">{money(r.amountPaid)}</TableCell>
+                              <TableCell className="text-right font-medium text-orange-600">{money(r.amountRemaining)}</TableCell>
+                              <TableCell className="text-right font-medium">{money(r.totalAmount)}</TableCell>
+                              <TableCell>
+                                <span
+                                  className={
+                                    r.status === "Paid"
+                                      ? "rounded-full bg-emerald-100 text-emerald-700 text-[11px] px-2 py-0.5 font-semibold"
+                                      : r.status === "Partially Paid"
+                                        ? "rounded-full bg-amber-100 text-amber-700 text-[11px] px-2 py-0.5 font-semibold"
+                                        : "rounded-full bg-slate-100 text-slate-700 text-[11px] px-2 py-0.5 font-semibold"
+                                  }
+                                >
+                                  {r.status}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openAddForParty(activePartyType, p.id, p.name);
+                                      // Prefill reference with invoice number for traceability.
+                                      setFormData((s) => ({ ...s, reference: r.invoiceNo }));
+                                    }}
+                                  >
+                                    Add Payment
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(`/invoices/${r.invoiceId}/print`, "_blank", "noopener,noreferrer");
+                                    }}
+                                  >
+                                    Print
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))

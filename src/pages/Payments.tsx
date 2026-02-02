@@ -111,7 +111,7 @@ const defaultFormState = {
   partyType: "customer" as PaymentRecord["partyType"],
   partyId: "",
   partyName: "",
-  invoiceId: "__general__",
+  invoiceId: "",
   amount: "",
   method: "Cash" as PaymentMethod,
   reference: "",
@@ -420,7 +420,7 @@ export default function Payments() {
       partyType,
       partyId,
       partyName,
-      invoiceId: "__general__",
+      invoiceId: "",
       direction: partyType === "customer" ? "In" : "Out",
     }));
     setIsDialogOpen(true);
@@ -623,7 +623,7 @@ export default function Payments() {
       partyType: row.partyType,
       partyId: row.partyId || "",
       partyName: row.partyName || "",
-      invoiceId: row.invoiceId || "__general__",
+      invoiceId: row.invoiceId || "",
       amount: (row.amount ?? 0).toString(),
       method: row.method === "Bank" ? "Bank Transfer" : row.method,
       reference: row.reference,
@@ -690,8 +690,7 @@ export default function Payments() {
     const resolvedDirection: PaymentDirection =
       formData.partyType === "supplier" ? "Out" : "In";
 
-    const selectedInvoice =
-      formData.invoiceId && formData.invoiceId !== "__general__" ? invoices.find((x) => x.id === formData.invoiceId) : undefined;
+    const selectedInvoice = formData.invoiceId ? invoices.find((x) => x.id === formData.invoiceId) : undefined;
     const selectedBank = formData.bankAccountId ? bankAccounts.find((b) => b.id === formData.bankAccountId) : undefined;
 
     const bankTransferCharge = safeNumber(formData.bankTransferCharge);
@@ -1124,15 +1123,15 @@ export default function Payments() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label>Select Invoice (Optional)</Label>
+              <Label>Select Invoice</Label>
               <Select
-                value={formData.invoiceId}
+                value={formData.invoiceId || undefined}
                 onValueChange={(v) => {
                   setFormData((s) => ({
                     ...s,
                     invoiceId: v,
                     reference:
-                      v && v !== "__general__"
+                      v
                         ? (() => {
                             const inv = invoices.find((x) => x.id === v);
                             return (inv?.manualInvoiceNo || inv?.invoiceNo || s.reference).toString();
@@ -1142,27 +1141,19 @@ export default function Payments() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select invoice (optional)" />
+                  <SelectValue placeholder="Select invoice" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__general__">General Payment (Not linked to invoice)</SelectItem>
-                  {formData.partyType !== "other" && formData.partyId
-                    ? invoices
-                        .filter((x) => x.partyType === (formData.partyType as PartyType) && x.partyId === formData.partyId)
-                        .map((inv) => {
-                          const labelNo = inv.manualInvoiceNo || inv.invoiceNo;
-                          return (
-                            <SelectItem key={inv.id} value={inv.id}>
-                              {labelNo} — {money(inv.total || 0)}
-                            </SelectItem>
-                          );
-                        })
-                    : null}
+                  {invoices.map((inv) => {
+                    const labelNo = inv.manualInvoiceNo || inv.invoiceNo;
+                    return (
+                      <SelectItem key={inv.id} value={inv.id}>
+                        {labelNo} — {money(inv.total || 0)}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
-              <div className="text-xs text-muted-foreground">
-                If you keep “General Payment”, it will be treated as an advance and can offset future invoices.
-              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

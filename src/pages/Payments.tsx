@@ -906,62 +906,7 @@ export default function Payments() {
     <>
       <AppHeader title="Payments" subtitle="Track payments received and paid" />
 
-      <div className="flex-1 overflow-auto p-6 space-y-5">
-        <div className="flex items-center justify-end gap-2">
-          <Button type="button" variant="outline" className="gap-2 h-10" onClick={() => setFiltersOpen((v) => !v)}>
-            <Filter className="h-4 w-4" />
-            Filter
-          </Button>
-          <Button variant="outline" className="gap-2 h-10" onClick={fetchAll} disabled={isLoading}>
-            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
-
-        {filtersOpen ? (
-          <Card className="p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant={filterOverdueOnly ? "default" : "outline"}
-                className={filterOverdueOnly ? "bg-emerald-600 hover:bg-emerald-700" : ""}
-                onClick={() => setFilterOverdueOnly((v) => !v)}
-              >
-                Overdue only
-              </Button>
-              <Button
-                type="button"
-                variant={filterOutstandingOnly ? "default" : "outline"}
-                className={filterOutstandingOnly ? "bg-emerald-600 hover:bg-emerald-700" : ""}
-                onClick={() => setFilterOutstandingOnly((v) => !v)}
-              >
-                Outstanding only
-              </Button>
-              <Button
-                type="button"
-                variant={filterAdvanceOnly ? "default" : "outline"}
-                className={filterAdvanceOnly ? "bg-emerald-600 hover:bg-emerald-700" : ""}
-                onClick={() => setFilterAdvanceOnly((v) => !v)}
-              >
-                Advance only
-              </Button>
-              {(filterOverdueOnly || filterOutstandingOnly || filterAdvanceOnly) ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setFilterOverdueOnly(false);
-                    setFilterOutstandingOnly(false);
-                    setFilterAdvanceOnly(false);
-                  }}
-                >
-                  Clear
-                </Button>
-              ) : null}
-            </div>
-          </Card>
-        ) : null}
-
+      <div className="flex-1 overflow-auto p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             title="Total outstanding"
@@ -1001,45 +946,87 @@ export default function Payments() {
           />
         </div>
 
-        <Card className="p-4 rounded-2xl shadow-sm">
-          <div className="rounded-xl border bg-muted/10 p-1 grid grid-cols-2 gap-1">
-            <Button
-              type="button"
-              className={activePartyType === "customer" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-transparent hover:bg-background"}
-              variant={activePartyType === "customer" ? "default" : "ghost"}
-              onClick={() => {
-                setActivePartyType("customer");
-                setOpenPartyId(null);
-              }}
-            >
-              Customers
-            </Button>
-            <Button
-              type="button"
-              className={activePartyType === "supplier" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-transparent hover:bg-background"}
-              variant={activePartyType === "supplier" ? "default" : "ghost"}
-              onClick={() => {
-                setActivePartyType("supplier");
-                setOpenPartyId(null);
-              }}
-            >
-              Suppliers
-            </Button>
-          </div>
+        <Card className="p-4">
+          <div className="flex flex-col md:flex-row md:items-center gap-3 justify-between">
+            <div className="flex flex-col md:flex-row md:items-center gap-3">
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={activePartyType === "customer" ? "default" : "outline"}
+                  onClick={() => {
+                    setActivePartyType("customer");
+                    setOpenPartyId(null);
+                  }}
+                >
+                  Customers
+                </Button>
+                <Button
+                  type="button"
+                  variant={activePartyType === "supplier" ? "default" : "outline"}
+                  onClick={() => {
+                    setActivePartyType("supplier");
+                    setOpenPartyId(null);
+                  }}
+                >
+                  Suppliers
+                </Button>
+              </div>
 
-          <div className="mt-4 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={partySearch}
-              onChange={(e) => setPartySearch(e.target.value)}
-              placeholder={activePartyType === "customer" ? "Search customers..." : "Search suppliers..."}
-              className="pl-10"
-            />
+              <div className="relative w-full md:w-96">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={partySearch}
+                  onChange={(e) => setPartySearch(e.target.value)}
+                  placeholder={activePartyType === "customer" ? "Search customers..." : "Search suppliers..."}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <Button type="button" variant="outline" className="gap-2" onClick={() => setFiltersOpen((v) => !v)}>
+                <Filter className="h-4 w-4" />
+                Filter
+              </Button>
+              <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
+                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
           </div>
         </Card>
 
-        <Card className="p-0 overflow-hidden rounded-2xl shadow-sm">
-          <div className="divide-y">
+        {filtersOpen ? (
+          <Card className="p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant={filterOverdueOnly ? "default" : "outline"} onClick={() => setFilterOverdueOnly((v) => !v)}>
+                Overdue only
+              </Button>
+              <Button type="button" variant={filterOutstandingOnly ? "default" : "outline"} onClick={() => setFilterOutstandingOnly((v) => !v)}>
+                Outstanding only
+              </Button>
+              <Button type="button" variant={filterAdvanceOnly ? "default" : "outline"} onClick={() => setFilterAdvanceOnly((v) => !v)}>
+                Advance only
+              </Button>
+              {(filterOverdueOnly || filterOutstandingOnly || filterAdvanceOnly) ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setFilterOverdueOnly(false);
+                    setFilterOutstandingOnly(false);
+                    setFilterAdvanceOnly(false);
+                  }}
+                >
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+          </Card>
+        ) : null}
+
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className="divide-y divide-border">
             {visiblePartySummaries.map((p) => {
             const isOpen = openPartyId === p.id;
             const settledLabel = activePartyType === "customer" ? "Received" : "Paid";
@@ -1048,11 +1035,11 @@ export default function Payments() {
 
             const accentClass =
               p.overdueOutstanding > 0
-                ? "border-l-red-500"
+                ? "border-l-[hsl(var(--destructive))]"
                 : p.outstanding > 0
-                  ? "border-l-amber-500"
+                  ? "border-l-[hsl(var(--warning))]"
                   : p.advance > 0
-                    ? "border-l-green-500"
+                    ? "border-l-[hsl(var(--success))]"
                     : "border-l-transparent";
 
             const isActive =
@@ -1087,7 +1074,7 @@ export default function Payments() {
                           <span className="text-xs font-semibold text-muted-foreground">{shortCode}</span>
                         ) : null}
                         {isActive ? (
-                          <span className="rounded-full bg-blue-100 text-blue-700 text-[11px] px-2 py-0.5 font-semibold">
+                          <span className="rounded-full bg-info/20 text-info text-[11px] px-2 py-0.5 font-semibold">
                             ACTIVE
                           </span>
                         ) : null}
@@ -1096,7 +1083,7 @@ export default function Payments() {
                             OVERDUE
                           </span>
                         ) : p.advance > 0 ? (
-                          <span className="rounded-full bg-emerald-100 text-emerald-700 text-[11px] px-2 py-0.5 font-semibold">
+                          <span className="rounded-full bg-success/20 text-success text-[11px] px-2 py-0.5 font-semibold">
                             ADVANCE
                           </span>
                         ) : null}
@@ -1107,17 +1094,17 @@ export default function Payments() {
                           Total Invoiced: <span className="text-foreground font-medium">{money(p.totalInvoiced)}</span>
                         </div>
                         <div className="text-muted-foreground">
-                          {settledLabel}: <span className="font-medium text-emerald-700">{money(p.settled)}</span>
+                          {settledLabel}: <span className="font-medium text-success">{money(p.settled)}</span>
                         </div>
                         <div className="text-muted-foreground">
-                          Returns/Adjustments: <span className="font-medium text-purple-700">{money(p.creditAdjustments)}</span>
+                          Returns/Adjustments: <span className="font-medium text-info">{money(p.creditAdjustments)}</span>
                         </div>
                         <div className="text-muted-foreground">
-                          {dueLabel}: <span className="font-semibold text-orange-600">{money(p.outstanding)}</span>
+                          {dueLabel}: <span className="font-semibold text-warning">{money(p.outstanding)}</span>
                         </div>
                         {p.advance > 0 ? (
                           <div className="text-muted-foreground">
-                            Advance Balance: <span className="font-medium text-blue-700">{money(p.advance)}</span>
+                            Advance Balance: <span className="font-medium text-info">{money(p.advance)}</span>
                           </div>
                         ) : null}
                       </div>
@@ -1129,7 +1116,8 @@ export default function Payments() {
                       <DropdownMenuTrigger asChild>
                         <Button
                           type="button"
-                          className="gap-2 bg-slate-700 text-white hover:bg-slate-800"
+                          variant="outline"
+                          className="gap-2"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <Printer className="h-4 w-4" />
@@ -1151,7 +1139,7 @@ export default function Payments() {
 
                     <Button
                       type="button"
-                      className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                      className="gap-2"
                       onClick={(e) => {
                         e.stopPropagation();
                         openAddForParty(activePartyType, p.id, p.name);
@@ -1195,17 +1183,17 @@ export default function Payments() {
                               <TableCell>{r.date || "—"}</TableCell>
                               <TableCell>{r.type}</TableCell>
                               <TableCell className="font-medium">{r.invoiceNo || "—"}</TableCell>
-                              <TableCell className="text-right font-medium text-emerald-700">{money(r.amountPaid)}</TableCell>
-                              <TableCell className="text-right font-medium text-orange-600">{money(r.amountRemaining)}</TableCell>
+                              <TableCell className="text-right font-medium text-success">{money(r.amountPaid)}</TableCell>
+                              <TableCell className="text-right font-medium text-warning">{money(r.amountRemaining)}</TableCell>
                               <TableCell className="text-right font-medium">{money(r.totalAmount)}</TableCell>
                               <TableCell>
                                 <span
                                   className={
                                     r.status === "Paid"
-                                      ? "rounded-full bg-emerald-100 text-emerald-700 text-[11px] px-2 py-0.5 font-semibold"
+                                      ? "rounded-full bg-success/20 text-success text-[11px] px-2 py-0.5 font-semibold"
                                       : r.status === "Partially Paid"
-                                        ? "rounded-full bg-amber-100 text-amber-700 text-[11px] px-2 py-0.5 font-semibold"
-                                        : "rounded-full bg-slate-100 text-slate-700 text-[11px] px-2 py-0.5 font-semibold"
+                                        ? "rounded-full bg-warning/20 text-warning text-[11px] px-2 py-0.5 font-semibold"
+                                        : "rounded-full bg-secondary text-secondary-foreground text-[11px] px-2 py-0.5 font-semibold"
                                   }
                                 >
                                   {r.status}

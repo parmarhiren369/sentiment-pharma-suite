@@ -123,7 +123,14 @@ export default function Invoices() {
 
   const computedTax = useMemo(() => {
     if (lineItems.length) {
-      return Math.max(0, lineItems.reduce((sum, it) => sum + (Number(it.tax) || 0), 0));
+      return Math.max(
+        0,
+        lineItems.reduce((sum, it) => {
+          const base = (Number(it.quantity) || 0) * (Number(it.rate) || 0);
+          const pct = Number(it.tax) || 0;
+          return sum + (base * pct) / 100;
+        }, 0)
+      );
     }
     return Math.max(0, safeNumber(formData.tax));
   }, [formData.tax, lineItems]);
@@ -684,13 +691,15 @@ export default function Invoices() {
                   <div className="space-y-2">
                     {lineItems.map((it, idx) => {
                       const baseAmount = (Number(it.quantity) || 0) * (Number(it.rate) || 0);
-                      const taxAmount = Number(it.tax) || 0;
+                      const taxPercent = Number(it.tax) || 0;
                       const type = it.taxType || "CGST / SGST";
-                      const cgstAmount = type === "CGST / SGST" ? taxAmount / 2 : 0;
-                      const sgstAmount = type === "CGST / SGST" ? taxAmount / 2 : 0;
+                      const cgstPercent = type === "CGST / SGST" ? taxPercent / 2 : 0;
+                      const sgstPercent = type === "CGST / SGST" ? taxPercent / 2 : 0;
+                      const jgstPercent = type === "JGST" ? taxPercent : 0;
+                      const taxAmount = (baseAmount * taxPercent) / 100;
                       const amount = baseAmount + taxAmount;
                       return (
-                        <div key={idx} className="grid grid-cols-1 md:grid-cols-[repeat(17,minmax(0,1fr))] gap-2 items-end">
+                        <div key={idx} className="grid grid-cols-1 md:grid-cols-[repeat(18,minmax(0,1fr))] gap-2 items-end">
                           <div className="md:col-span-5 space-y-1">
                             <Label className="text-xs text-muted-foreground">Item</Label>
                             <Select
@@ -772,7 +781,7 @@ export default function Invoices() {
                           </div>
 
                           <div className="md:col-span-1 space-y-1">
-                            <Label className="text-xs text-muted-foreground">TAX</Label>
+                            <Label className="text-xs text-muted-foreground">TAX (%)</Label>
                             <Input
                               type="number"
                               inputMode="decimal"
@@ -785,13 +794,18 @@ export default function Invoices() {
                           </div>
 
                           <div className="md:col-span-1 space-y-1">
-                            <Label className="text-xs text-muted-foreground">CGST</Label>
-                            <Input value={cgstAmount.toFixed(2)} readOnly />
+                            <Label className="text-xs text-muted-foreground">CGST (%)</Label>
+                            <Input value={cgstPercent.toFixed(2)} readOnly />
                           </div>
 
                           <div className="md:col-span-1 space-y-1">
-                            <Label className="text-xs text-muted-foreground">SGST</Label>
-                            <Input value={sgstAmount.toFixed(2)} readOnly />
+                            <Label className="text-xs text-muted-foreground">SGST (%)</Label>
+                            <Input value={sgstPercent.toFixed(2)} readOnly />
+                          </div>
+
+                          <div className="md:col-span-1 space-y-1">
+                            <Label className="text-xs text-muted-foreground">JGST (%)</Label>
+                            <Input value={jgstPercent.toFixed(2)} readOnly />
                           </div>
 
                           <div className="md:col-span-1 space-y-1">

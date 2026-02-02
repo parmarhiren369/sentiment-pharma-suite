@@ -45,7 +45,7 @@ import {
 type InvoiceTxStatus = "Paid" | "Partially Paid" | "Unpaid";
 
 type PaymentDirection = "In" | "Out";
-type PaymentMethod = "Cash" | "UPI" | "Bank" | "Card" | "Cheque";
+type PaymentMethod = "Cash" | "UPI" | "Bank" | "Bank Transfer" | "Card" | "Cheque";
 type PaymentStatus = "Completed" | "Pending" | "Failed";
 
 interface PaymentRecord {
@@ -55,9 +55,14 @@ interface PaymentRecord {
   partyType: "customer" | "supplier" | "other";
   partyId?: string;
   partyName?: string;
+  invoiceId?: string;
+  invoiceNo?: string;
   amount: number;
   method: PaymentMethod;
   reference: string;
+  bankAccountId?: string;
+  bankAccountName?: string;
+  bankTransferCharge?: number;
   notes?: string;
   status: PaymentStatus;
   createdAt?: Date;
@@ -106,9 +111,12 @@ const defaultFormState = {
   partyType: "customer" as PaymentRecord["partyType"],
   partyId: "",
   partyName: "",
+  invoiceId: "__general__",
   amount: "",
   method: "Cash" as PaymentMethod,
   reference: "",
+  bankAccountId: "",
+  bankTransferCharge: "",
   notes: "",
   status: "Completed" as PaymentStatus,
 };
@@ -133,6 +141,7 @@ export default function Payments() {
   const [suppliers, setSuppliers] = useState<PartyOption[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [notes, setNotes] = useState<NoteRecord[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
 
   const [activePartyType, setActivePartyType] = useState<PartyType>("customer");
   const [partySearch, setPartySearch] = useState("");
@@ -283,15 +292,37 @@ export default function Payments() {
         partyType: (data.partyType || "customer") as PaymentRecord["partyType"],
         partyId: (data.partyId || "").toString() || undefined,
         partyName: (data.partyName || "").toString() || undefined,
+        invoiceId: (data.invoiceId || "").toString() || undefined,
+        invoiceNo: (data.invoiceNo || "").toString() || undefined,
         amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
-        method: (data.method || "Cash") as PaymentMethod,
+        method: ((data.method || "Cash") as PaymentMethod) || "Cash",
         reference: (data.reference || "").toString(),
+        bankAccountId: (data.bankAccountId || "").toString() || undefined,
+        bankAccountName: (data.bankAccountName || "").toString() || undefined,
+        bankTransferCharge:
+          typeof data.bankTransferCharge === "number" ? data.bankTransferCharge : parseFloat(data.bankTransferCharge) || 0,
         notes: (data.notes || "").toString() || undefined,
         status: (data.status || "Completed") as PaymentStatus,
         createdAt: data.createdAt?.toDate?.() || new Date(),
       } as PaymentRecord;
     });
     setPayments(list);
+  };
+
+  const fetchBankAccounts = async () => {
+    const qy = query(collection(db, "bankAccounts"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(qy);
+    const list = snap.docs
+      .map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          accountName: (data.accountName || "").toString(),
+          accountNumber: (data.accountNumber || "").toString() || undefined,
+        } as BankAccount;
+      })
+      .filter((b) => b.accountName);
+    setBankAccounts(list);
   };
 
   const fetchInvoices = async () => {
@@ -389,6 +420,7 @@ export default function Payments() {
       partyType,
       partyId,
       partyName,
+      invoiceId: "__general__",
       direction: partyType === "customer" ? "In" : "Out",
     }));
     setIsDialogOpen(true);
@@ -427,7 +459,13 @@ export default function Payments() {
     const settledDirection: PaymentDirection = activePartyType === "customer" ? "In" : "Out";
     const relevantPayments = summary.payments.filter((p) => p.direction === settledDirection);
 
-    const paymentMatchesInvoice = (payment: PaymentRecord, systemInvoiceNo: string, manualInvoiceNo?: string) => {
+    const paymentMatchesInvoice = (
+      payment: PaymentRecord,
+      invoiceId: string,
+      systemInvoiceNo: string,
+      manualInvoiceNo?: string
+    ): boolean => {
+      if (payment.invoiceId && invoiceId && payment.invoiceId === invoiceId) return true;
       const ref = norm(payment.reference);
       if (!ref) return false;
       const sys = norm(systemInvoiceNo);
@@ -456,7 +494,7 @@ export default function Payments() {
       const adjustedTotal = Math.max(0, baseTotal + noteAdjust.debit - noteAdjust.credit);
 
       const paidRaw = relevantPayments
-        .filter((p) => paymentMatchesInvoice(p, systemInvoiceNo, manualInvoiceNo))
+        .filter((p) => paymentMatchesInvoice(p, inv.id, systemInvoiceNo, manualInvoiceNo))
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       const paid = Math.min(adjustedTotal, Math.max(0, paidRaw));
 
@@ -585,9 +623,12 @@ export default function Payments() {
       partyType: row.partyType,
       partyId: row.partyId || "",
       partyName: row.partyName || "",
+      invoiceId: row.invoiceId || "__general__",
       amount: (row.amount ?? 0).toString(),
-      method: row.method,
+      method: row.method === "Bank" ? "Bank Transfer" : row.method,
       reference: row.reference,
+      bankAccountId: row.bankAccountId || "",
+      bankTransferCharge: (row.bankTransferCharge ?? 0).toString(),
       notes: row.notes || "",
       status: row.status,
     });
@@ -630,6 +671,12 @@ export default function Payments() {
       return;
     }
 
+    const isBankTransfer = formData.method === "Bank" || formData.method === "Bank Transfer";
+    if (isBankTransfer && !formData.bankAccountId) {
+      toast({ title: "Validation error", description: "Select a bank account for bank transfer.", variant: "destructive" });
+      return;
+    }
+
     if (formData.partyType !== "other" && !formData.partyId) {
       toast({ title: "Validation error", description: "Select a party.", variant: "destructive" });
       return;
@@ -640,15 +687,29 @@ export default function Payments() {
       return;
     }
 
+    const resolvedDirection: PaymentDirection =
+      formData.partyType === "supplier" ? "Out" : "In";
+
+    const selectedInvoice =
+      formData.invoiceId && formData.invoiceId !== "__general__" ? invoices.find((x) => x.id === formData.invoiceId) : undefined;
+    const selectedBank = formData.bankAccountId ? bankAccounts.find((b) => b.id === formData.bankAccountId) : undefined;
+
+    const bankTransferCharge = safeNumber(formData.bankTransferCharge);
+
     const payload = {
       date: formData.date,
-      direction: formData.direction,
+      direction: resolvedDirection,
       partyType: formData.partyType,
       partyId: formData.partyType === "other" ? "" : formData.partyId,
       partyName: selectedParty?.name || "",
+      invoiceId: selectedInvoice?.id || "",
+      invoiceNo: selectedInvoice ? (selectedInvoice.manualInvoiceNo || selectedInvoice.invoiceNo || "") : "",
       amount,
-      method: formData.method,
+      method: (formData.method === "Bank" ? "Bank Transfer" : formData.method) as PaymentMethod,
       reference: formData.reference.trim(),
+      bankAccountId: selectedBank?.id || "",
+      bankAccountName: selectedBank?.accountName || "",
+      bankTransferCharge: isBankTransfer ? bankTransferCharge : 0,
       notes: formData.notes.trim(),
       status: formData.status,
       updatedAt: Timestamp.now(),
@@ -967,7 +1028,7 @@ export default function Payments() {
                 </div>
 
                 {isOpen ? (
-                  <div className="mt-4 rounded-md border overflow-x-auto bg-background">
+                  <div className="mt-4 rounded-md border overflow-x-auto bg-background" onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b bg-muted/20">
                       <div className="text-sm font-medium">Transaction History</div>
                       <div className="text-xs text-muted-foreground">Balance: {money(p.balance)}</div>
@@ -1019,19 +1080,6 @@ export default function Payments() {
                                   <Button
                                     type="button"
                                     size="sm"
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openAddForParty(activePartyType, p.id, p.name);
-                                      // Prefill reference with invoice number for traceability.
-                                      setFormData((s) => ({ ...s, reference: r.invoiceNo }));
-                                    }}
-                                  >
-                                    Add Payment
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
                                     variant="ghost"
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -1075,47 +1123,89 @@ export default function Payments() {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Select Invoice (Optional)</Label>
+              <Select
+                value={formData.invoiceId}
+                onValueChange={(v) => {
+                  setFormData((s) => ({
+                    ...s,
+                    invoiceId: v,
+                    reference:
+                      v && v !== "__general__"
+                        ? (() => {
+                            const inv = invoices.find((x) => x.id === v);
+                            return (inv?.manualInvoiceNo || inv?.invoiceNo || s.reference).toString();
+                          })()
+                        : s.reference,
+                  }));
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select invoice (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__general__">General Payment (Not linked to invoice)</SelectItem>
+                  {formData.partyType !== "other" && formData.partyId
+                    ? invoices
+                        .filter((x) => x.partyType === (formData.partyType as PartyType) && x.partyId === formData.partyId)
+                        .map((inv) => {
+                          const labelNo = inv.manualInvoiceNo || inv.invoiceNo;
+                          return (
+                            <SelectItem key={inv.id} value={inv.id}>
+                              {labelNo} — {money(inv.total || 0)}
+                            </SelectItem>
+                          );
+                        })
+                    : null}
+                </SelectContent>
+              </Select>
+              <div className="text-xs text-muted-foreground">
+                If you keep “General Payment”, it will be treated as an advance and can offset future invoices.
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
-                <Input id="date" type="date" value={formData.date} onChange={(e) => setFormData((s) => ({ ...s, date: e.target.value }))} />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Direction</Label>
-                <Select value={formData.direction} onValueChange={(v) => setFormData((s) => ({ ...s, direction: v as PaymentDirection }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select direction" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="In">Received (In)</SelectItem>
-                    <SelectItem value="Out">Paid (Out)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="amount">Amount</Label>
+                <Label htmlFor="amount">
+                  {formData.partyType === "supplier" || formData.direction === "Out" ? "Paid Amount *" : "Received Amount *"}
+                </Label>
                 <Input
                   id="amount"
                   type="number"
                   inputMode="decimal"
                   value={formData.amount}
                   onChange={(e) => setFormData((s) => ({ ...s, amount: e.target.value }))}
-                  placeholder="0"
+                  placeholder="0.00"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Method</Label>
-                <Select value={formData.method} onValueChange={(v) => setFormData((s) => ({ ...s, method: v as PaymentMethod }))}>
+                <Label htmlFor="date">Payment Date *</Label>
+                <Input id="date" type="date" value={formData.date} onChange={(e) => setFormData((s) => ({ ...s, date: e.target.value }))} />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Payment Method *</Label>
+                <Select
+                  value={formData.method}
+                  onValueChange={(v) => {
+                    const next = v as PaymentMethod;
+                    setFormData((s) => ({
+                      ...s,
+                      method: next,
+                      bankAccountId: next === "Bank" || next === "Bank Transfer" ? s.bankAccountId : "",
+                      bankTransferCharge: next === "Bank" || next === "Bank Transfer" ? s.bankTransferCharge : "",
+                    }));
+                  }}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select method" />
+                    <SelectValue placeholder="Select payment method" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Cash">Cash</SelectItem>
                     <SelectItem value="UPI">UPI</SelectItem>
-                    <SelectItem value="Bank">Bank</SelectItem>
+                    <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
                     <SelectItem value="Card">Card</SelectItem>
                     <SelectItem value="Cheque">Cheque</SelectItem>
                   </SelectContent>
@@ -1123,28 +1213,49 @@ export default function Payments() {
               </div>
 
               <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={formData.status} onValueChange={(v) => setFormData((s) => ({ ...s, status: v as PaymentStatus }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Completed">Completed</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Failed">Failed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="reference">Reference</Label>
+                <Label htmlFor="reference">Payment Reference</Label>
                 <Input
                   id="reference"
                   value={formData.reference}
                   onChange={(e) => setFormData((s) => ({ ...s, reference: e.target.value }))}
-                  placeholder="UTR / Receipt no / Invoice no"
+                  placeholder="Cheque number, transaction ID, etc."
                 />
               </div>
+
+              {(formData.method === "Bank" || formData.method === "Bank Transfer") ? (
+                <>
+                  <div className="space-y-2">
+                    <Label>Select Bank Account *</Label>
+                    <Select value={formData.bankAccountId} onValueChange={(v) => setFormData((s) => ({ ...s, bankAccountId: v }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select bank account" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bankAccounts.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.accountName}{b.accountNumber ? ` (•••• ${b.accountNumber.replace(/\s+/g, "").slice(-4)})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="bankTransferCharge">Bank Transfer Charge</Label>
+                    <Input
+                      id="bankTransferCharge"
+                      type="number"
+                      inputMode="decimal"
+                      value={formData.bankTransferCharge}
+                      onChange={(e) => setFormData((s) => ({ ...s, bankTransferCharge: e.target.value }))}
+                      placeholder="0.00"
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      Transfer charges are tracked but not included in balance calculations.
+                    </div>
+                  </div>
+                </>
+              ) : null}
 
               <div className="space-y-2">
                 <Label>Party Type</Label>
@@ -1156,6 +1267,8 @@ export default function Payments() {
                       partyType: v as PaymentRecord["partyType"],
                       partyId: "",
                       partyName: "",
+                      invoiceId: "__general__",
+                      direction: v === "supplier" ? "Out" : "In",
                     }))
                   }
                 >
@@ -1207,7 +1320,7 @@ export default function Payments() {
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : editing ? "Update" : "Save"}
+                {isSubmitting ? "Saving..." : editing ? "Update Payment" : "Save Payment"}
               </Button>
             </DialogFooter>
           </form>

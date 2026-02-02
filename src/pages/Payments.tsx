@@ -1237,7 +1237,7 @@ export default function Payments() {
               <div className="p-6 text-sm text-muted-foreground">No parties found.</div>
             ) : null}
           </div>
-        </Card>
+        </div>
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

@@ -947,32 +947,32 @@ export default function Payments() {
         </div>
 
         <Card className="p-4">
-          <div className="flex flex-col md:flex-row md:items-center gap-3 justify-between">
-            <div className="flex flex-col md:flex-row md:items-center gap-3">
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={activePartyType === "customer" ? "default" : "outline"}
-                  onClick={() => {
-                    setActivePartyType("customer");
-                    setOpenPartyId(null);
-                  }}
-                >
-                  Customers
-                </Button>
-                <Button
-                  type="button"
-                  variant={activePartyType === "supplier" ? "default" : "outline"}
-                  onClick={() => {
-                    setActivePartyType("supplier");
-                    setOpenPartyId(null);
-                  }}
-                >
-                  Suppliers
-                </Button>
-              </div>
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={activePartyType === "customer" ? "default" : "outline"}
+                onClick={() => {
+                  setActivePartyType("customer");
+                  setOpenPartyId(null);
+                }}
+              >
+                Customers
+              </Button>
+              <Button
+                type="button"
+                variant={activePartyType === "supplier" ? "default" : "outline"}
+                onClick={() => {
+                  setActivePartyType("supplier");
+                  setOpenPartyId(null);
+                }}
+              >
+                Suppliers
+              </Button>
+            </div>
 
-              <div className="relative w-full md:w-96">
+            <div className="flex flex-col md:flex-row gap-2">
+              <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   value={partySearch}
@@ -981,17 +981,16 @@ export default function Payments() {
                   className="pl-10"
                 />
               </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2">
-              <Button type="button" variant="outline" className="gap-2" onClick={() => setFiltersOpen((v) => !v)}>
-                <Filter className="h-4 w-4" />
-                Filter
-              </Button>
-              <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
-                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" className="gap-2" onClick={() => setFiltersOpen((v) => !v)}>
+                  <Filter className="h-4 w-4" />
+                  Filter
+                </Button>
+                <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </div>
             </div>
           </div>
         </Card>

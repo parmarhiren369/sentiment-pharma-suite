@@ -22,7 +22,7 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { ArrowDownRight, ArrowUpRight, Clock, CreditCard, HandCoins, Plus, RefreshCw, Users, Wallet } from "lucide-react";
+import { ArrowUpRight, Clock, HandCoins, Plus, RefreshCw, Users, Wallet } from "lucide-react";
 
 type PaymentDirection = "In" | "Out";
 type PaymentMethod = "Cash" | "UPI" | "Bank" | "Card" | "Cheque";
@@ -600,11 +600,12 @@ export default function Payments() {
         </div>
 
         <Card className="p-4 mb-4">
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex items-center justify-center">
+            <div className="flex w-full max-w-3xl gap-4">
             <Button
               size="lg"
               variant={activePartyType === "customer" ? "default" : "outline"}
-              className="h-12 px-10 text-base"
+              className="h-12 flex-1 text-base"
               onClick={() => {
                 setActivePartyType("customer");
                 setOpenPartyId(null);
@@ -615,7 +616,7 @@ export default function Payments() {
             <Button
               size="lg"
               variant={activePartyType === "supplier" ? "default" : "outline"}
-              className="h-12 px-10 text-base"
+              className="h-12 flex-1 text-base"
               onClick={() => {
                 setActivePartyType("supplier");
                 setOpenPartyId(null);
@@ -623,28 +624,14 @@ export default function Payments() {
             >
               Suppliers
             </Button>
+            </div>
           </div>
 
-          <div className="mt-4 flex flex-col md:flex-row md:items-center gap-2 justify-between">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <Input
-                placeholder={activePartyType === "customer" ? "Search customers..." : "Search suppliers..."}
-                value={partySearch}
-                onChange={(e) => setPartySearch(e.target.value)}
-                className="w-full sm:w-96"
-              />
-              <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
-                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            </div>
-
-            <div className="flex items-center justify-end">
-              <Button className="gap-2" onClick={openAdd}>
-                <Plus className="w-4 h-4" />
-                Add Payment
-              </Button>
-            </div>
+          <div className="mt-4 flex items-center justify-end">
+            <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
+              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
           </div>
         </Card>
 
@@ -655,7 +642,7 @@ export default function Payments() {
             const dueLabel = activePartyType === "customer" ? "To Receive" : "To Pay";
             const txRows = isOpen ? buildPartyTransactions(p) : [];
 
-            const MetricButton = ({ label, value }: { label: string; value: string }) => (
+            const MetricButton = ({ label, value, valueClassName }: { label: string; value: string; valueClassName?: string }) => (
               <Button
                 type="button"
                 variant="ghost"
@@ -663,7 +650,7 @@ export default function Payments() {
                 onClick={() => toggleParty(p.id)}
               >
                 <span className="text-xs text-muted-foreground mr-2">{label}</span>
-                <span className="text-sm font-medium">{value}</span>
+                <span className={`text-sm font-medium ${valueClassName || ""}`}>{value}</span>
               </Button>
             );
 
@@ -674,9 +661,9 @@ export default function Payments() {
                     <div className="font-bold text-base truncate">{p.name}</div>
                     <div className="flex flex-wrap items-center gap-2 mt-2">
                       <MetricButton label="Total invoiced:" value={rupees(p.totalInvoiced)} />
-                      <MetricButton label={`${settledLabel}:`} value={rupees(p.settled)} />
+                      <MetricButton label={`${settledLabel}:`} value={rupees(p.settled)} valueClassName={activePartyType === "customer" ? "text-success" : ""} />
                       <MetricButton label="Return/ Adjustments:" value={rupees(p.creditAdjustments)} />
-                      <MetricButton label={`${dueLabel}:`} value={rupees(p.outstanding)} />
+                      <MetricButton label={`${dueLabel}:`} value={rupees(p.outstanding)} valueClassName={activePartyType === "customer" ? "text-destructive" : ""} />
                     </div>
                   </div>
 

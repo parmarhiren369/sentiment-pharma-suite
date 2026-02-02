@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
@@ -688,144 +689,155 @@ export default function Invoices() {
                 {lineItems.length === 0 ? (
                   <div className="text-sm text-muted-foreground">No items added. You can still enter subtotal manually.</div>
                 ) : (
-                  <div className="space-y-2">
-                    {lineItems.map((it, idx) => {
-                      const baseAmount = (Number(it.quantity) || 0) * (Number(it.rate) || 0);
-                      const taxPercent = Number(it.tax) || 0;
-                      const type = it.taxType || "CGST / SGST";
-                      const cgstPercent = type === "CGST / SGST" ? taxPercent / 2 : 0;
-                      const sgstPercent = type === "CGST / SGST" ? taxPercent / 2 : 0;
-                      const jgstPercent = type === "JGST" ? taxPercent : 0;
-                      const taxAmount = (baseAmount * taxPercent) / 100;
-                      const amount = baseAmount + taxAmount;
-                      return (
-                        <div key={idx} className="grid grid-cols-1 md:grid-cols-[repeat(18,minmax(0,1fr))] gap-2 items-end">
-                          <div className="md:col-span-5 space-y-1">
-                            <Label className="text-xs text-muted-foreground">Item</Label>
-                            <Select
-                              value={it.processedInventoryId}
-                              onValueChange={(v) => {
-                                const selected = processedInventoryOptions.find((o) => o.id === v);
-                                setLineItems((prev) =>
-                                  prev.map((x, i) =>
-                                    i === idx
-                                      ? {
-                                          ...x,
-                                          processedInventoryId: v,
-                                          name: selected?.name || x.name,
-                                          unit: selected?.unit || x.unit || "pcs",
-                                        }
-                                      : x
-                                  )
-                                );
-                              }}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select processed item" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {processedInventoryOptions.map((o) => (
-                                  <SelectItem key={o.id} value={o.id}>
-                                    {o.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
+                  <div className="rounded-md border overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="min-w-[260px]">Item</TableHead>
+                          <TableHead className="w-[90px] text-right">Qty</TableHead>
+                          <TableHead className="w-[80px]">Unit</TableHead>
+                          <TableHead className="w-[110px] text-right">Rate</TableHead>
+                          <TableHead className="w-[140px]">Type</TableHead>
+                          <TableHead className="w-[110px] text-right">TAX (%)</TableHead>
+                          <TableHead className="w-[110px] text-right">CGST (%)</TableHead>
+                          <TableHead className="w-[110px] text-right">SGST (%)</TableHead>
+                          <TableHead className="w-[110px] text-right">JGST (%)</TableHead>
+                          <TableHead className="w-[120px] text-right">Tax Amt</TableHead>
+                          <TableHead className="w-[130px] text-right">Amount</TableHead>
+                          <TableHead className="w-[80px]" />
+                        </TableRow>
+                      </TableHeader>
 
-                          <div className="md:col-span-2 space-y-1">
-                            <Label className="text-xs text-muted-foreground">Qty</Label>
-                            <Input
-                              type="number"
-                              inputMode="decimal"
-                              value={String(it.quantity)}
-                              onChange={(e) => {
-                                const v = parseFloat(e.target.value);
-                                setLineItems((prev) => prev.map((x, i) => (i === idx ? { ...x, quantity: Number.isFinite(v) ? v : 0 } : x)));
-                              }}
-                            />
-                          </div>
+                      <TableBody>
+                        {lineItems.map((it, idx) => {
+                          const baseAmount = (Number(it.quantity) || 0) * (Number(it.rate) || 0);
+                          const taxPercent = Number(it.tax) || 0;
+                          const type = it.taxType || "CGST / SGST";
+                          const cgstPercent = type === "CGST / SGST" ? taxPercent / 2 : 0;
+                          const sgstPercent = type === "CGST / SGST" ? taxPercent / 2 : 0;
+                          const jgstPercent = type === "JGST" ? taxPercent : 0;
+                          const taxAmount = (baseAmount * taxPercent) / 100;
+                          const amount = baseAmount + taxAmount;
 
-                          <div className="md:col-span-1 space-y-1">
-                            <Label className="text-xs text-muted-foreground">Unit</Label>
-                            <Input value={it.unit} readOnly />
-                          </div>
+                          return (
+                            <TableRow key={idx}>
+                              <TableCell className="align-top">
+                                <Select
+                                  value={it.processedInventoryId}
+                                  onValueChange={(v) => {
+                                    const selected = processedInventoryOptions.find((o) => o.id === v);
+                                    setLineItems((prev) =>
+                                      prev.map((x, i) =>
+                                        i === idx
+                                          ? {
+                                              ...x,
+                                              processedInventoryId: v,
+                                              name: selected?.name || x.name,
+                                              unit: selected?.unit || x.unit || "pcs",
+                                            }
+                                          : x
+                                      )
+                                    );
+                                  }}
+                                >
+                                  <SelectTrigger className="min-w-[240px]">
+                                    <SelectValue placeholder="Select processed item" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {processedInventoryOptions.map((o) => (
+                                      <SelectItem key={o.id} value={o.id}>
+                                        {o.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
 
-                          <div className="md:col-span-2 space-y-1">
-                            <Label className="text-xs text-muted-foreground">Rate</Label>
-                            <Input
-                              type="number"
-                              inputMode="decimal"
-                              value={String(it.rate)}
-                              onChange={(e) => {
-                                const v = parseFloat(e.target.value);
-                                setLineItems((prev) => prev.map((x, i) => (i === idx ? { ...x, rate: Number.isFinite(v) ? v : 0 } : x)));
-                              }}
-                            />
-                          </div>
+                              <TableCell className="align-top">
+                                <Input
+                                  className="w-[90px] text-right"
+                                  type="number"
+                                  inputMode="decimal"
+                                  value={String(it.quantity)}
+                                  onChange={(e) => {
+                                    const v = parseFloat(e.target.value);
+                                    setLineItems((prev) => prev.map((x, i) => (i === idx ? { ...x, quantity: Number.isFinite(v) ? v : 0 } : x)));
+                                  }}
+                                />
+                              </TableCell>
 
-                          <div className="md:col-span-2 space-y-1">
-                            <Label className="text-xs text-muted-foreground">Type</Label>
-                            <Select
-                              value={type}
-                              onValueChange={(v) => setLineItems((prev) => prev.map((x, i) => (i === idx ? { ...x, taxType: v as any } : x)))}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="CGST / SGST">CGST / SGST</SelectItem>
-                                <SelectItem value="JGST">JGST</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                              <TableCell className="align-top">
+                                <Input className="w-[80px]" value={it.unit} readOnly />
+                              </TableCell>
 
-                          <div className="md:col-span-1 space-y-1">
-                            <Label className="text-xs text-muted-foreground">TAX (%)</Label>
-                            <Input
-                              type="number"
-                              inputMode="decimal"
-                              value={String(it.tax ?? 0)}
-                              onChange={(e) => {
-                                const v = parseFloat(e.target.value);
-                                setLineItems((prev) => prev.map((x, i) => (i === idx ? { ...x, tax: Number.isFinite(v) ? v : 0 } : x)));
-                              }}
-                            />
-                          </div>
+                              <TableCell className="align-top">
+                                <Input
+                                  className="w-[110px] text-right"
+                                  type="number"
+                                  inputMode="decimal"
+                                  value={String(it.rate)}
+                                  onChange={(e) => {
+                                    const v = parseFloat(e.target.value);
+                                    setLineItems((prev) => prev.map((x, i) => (i === idx ? { ...x, rate: Number.isFinite(v) ? v : 0 } : x)));
+                                  }}
+                                />
+                              </TableCell>
 
-                          <div className="md:col-span-1 space-y-1">
-                            <Label className="text-xs text-muted-foreground">CGST (%)</Label>
-                            <Input value={cgstPercent.toFixed(2)} readOnly />
-                          </div>
+                              <TableCell className="align-top">
+                                <Select value={type} onValueChange={(v) => setLineItems((prev) => prev.map((x, i) => (i === idx ? { ...x, taxType: v as any } : x)))}>
+                                  <SelectTrigger className="w-[140px]">
+                                    <SelectValue placeholder="Select" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="CGST / SGST">CGST / SGST</SelectItem>
+                                    <SelectItem value="JGST">JGST</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
 
-                          <div className="md:col-span-1 space-y-1">
-                            <Label className="text-xs text-muted-foreground">SGST (%)</Label>
-                            <Input value={sgstPercent.toFixed(2)} readOnly />
-                          </div>
+                              <TableCell className="align-top">
+                                <Input
+                                  className="w-[110px] text-right"
+                                  type="number"
+                                  inputMode="decimal"
+                                  value={String(it.tax ?? 0)}
+                                  onChange={(e) => {
+                                    const v = parseFloat(e.target.value);
+                                    setLineItems((prev) => prev.map((x, i) => (i === idx ? { ...x, tax: Number.isFinite(v) ? v : 0 } : x)));
+                                  }}
+                                />
+                              </TableCell>
 
-                          <div className="md:col-span-1 space-y-1">
-                            <Label className="text-xs text-muted-foreground">JGST (%)</Label>
-                            <Input value={jgstPercent.toFixed(2)} readOnly />
-                          </div>
+                              <TableCell className="align-top">
+                                <Input className="w-[110px] text-right bg-muted" value={cgstPercent.toFixed(2)} readOnly />
+                              </TableCell>
 
-                          <div className="md:col-span-1 space-y-1">
-                            <Label className="text-xs text-muted-foreground">Amt</Label>
-                            <Input value={amount.toFixed(2)} readOnly />
-                          </div>
+                              <TableCell className="align-top">
+                                <Input className="w-[110px] text-right bg-muted" value={sgstPercent.toFixed(2)} readOnly />
+                              </TableCell>
 
-                          <div className="md:col-span-1">
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => setLineItems((prev) => prev.filter((_, i) => i !== idx))}
-                            >
-                              Remove
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                              <TableCell className="align-top">
+                                <Input className="w-[110px] text-right bg-muted" value={jgstPercent.toFixed(2)} readOnly />
+                              </TableCell>
+
+                              <TableCell className="align-top">
+                                <Input className="w-[120px] text-right bg-muted" value={taxAmount.toFixed(2)} readOnly />
+                              </TableCell>
+
+                              <TableCell className="align-top">
+                                <Input className="w-[130px] text-right bg-muted" value={amount.toFixed(2)} readOnly />
+                              </TableCell>
+
+                              <TableCell className="align-top">
+                                <Button type="button" variant="destructive" size="sm" onClick={() => setLineItems((prev) => prev.filter((_, i) => i !== idx))}>
+                                  Remove
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
                   </div>
                 )}
               </div>

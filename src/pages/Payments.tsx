@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
+import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -8,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
@@ -22,7 +24,7 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { ArrowUpRight, Clock, HandCoins, Plus, Printer, RefreshCw, Users, Wallet } from "lucide-react";
+import { Clock, HandCoins, Pencil, Plus, Printer, RefreshCw, Trash2, Users, Wallet } from "lucide-react";
 
 type PaymentDirection = "In" | "Out";
 type PaymentMethod = "Cash" | "UPI" | "Bank" | "Card" | "Cheque";
@@ -103,6 +105,15 @@ export default function Payments() {
   const [suppliers, setSuppliers] = useState<PartyOption[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [notes, setNotes] = useState<NoteRecord[]>([]);
+
+  const [activeTab, setActiveTab] = useState<"transactions" | "ledger">("transactions");
+
+  const [txSearch, setTxSearch] = useState("");
+  const [txDirection, setTxDirection] = useState<PaymentDirection | "all">("all");
+  const [txStatus, setTxStatus] = useState<PaymentStatus | "all">("all");
+  const [txMethod, setTxMethod] = useState<PaymentMethod | "all">("all");
+  const [txFrom, setTxFrom] = useState("");
+  const [txTo, setTxTo] = useState("");
 
   const [activePartyType, setActivePartyType] = useState<PartyType>("customer");
   const [partySearch, setPartySearch] = useState("");
@@ -198,6 +209,54 @@ export default function Payments() {
     const activeCount = partySummaries.filter((x) => x.totalInvoiced > 0 || x.settled > 0 || x.creditAdjustments > 0 || x.debitAdjustments > 0).length;
     return { totalOutstanding, overdueAmount, advancePayments, activeCount };
   }, [partySummaries]);
+
+  const filteredPayments = useMemo(() => {
+    let list = payments;
+
+    if (txDirection !== "all") list = list.filter((p) => p.direction === txDirection);
+    if (txStatus !== "all") list = list.filter((p) => p.status === txStatus);
+    if (txMethod !== "all") list = list.filter((p) => p.method === txMethod);
+
+    if (txFrom) list = list.filter((p) => (p.date || "") >= txFrom);
+    if (txTo) list = list.filter((p) => (p.date || "") <= txTo);
+
+    if (txSearch.trim()) {
+      const q = txSearch.toLowerCase();
+      list = list.filter((p) => {
+        const party = (p.partyName || "").toString();
+        const ref = (p.reference || "").toString();
+        const method = (p.method || "").toString();
+        const status = (p.status || "").toString();
+        const type = (p.direction || "").toString();
+        return `${party} ${ref} ${method} ${status} ${type}`.toLowerCase().includes(q);
+      });
+    }
+
+    return list;
+  }, [payments, txDirection, txFrom, txMethod, txSearch, txStatus, txTo]);
+
+  const paymentStats = useMemo(() => {
+    const completed = filteredPayments.filter((p) => p.status === "Completed");
+    const received = completed.filter((p) => p.direction === "In").reduce((sum, p) => sum + (p.amount || 0), 0);
+    const paid = completed.filter((p) => p.direction === "Out").reduce((sum, p) => sum + (p.amount || 0), 0);
+    return { received, paid, count: filteredPayments.length };
+  }, [filteredPayments]);
+
+  const exportPaymentRows = useMemo(
+    () =>
+      filteredPayments.map((p) => ({
+        Date: p.date,
+        Direction: p.direction,
+        "Party Type": p.partyType,
+        Party: p.partyName || "",
+        Amount: p.amount,
+        Method: p.method,
+        Reference: p.reference,
+        Status: p.status,
+        Notes: p.notes || "",
+      })),
+    [filteredPayments]
+  );
 
   const visiblePartySummaries = useMemo(() => {
     if (!partySearch.trim()) return partySummaries;
@@ -559,7 +618,7 @@ export default function Payments() {
     <>
       <AppHeader title="Payments" subtitle="Track payments received and paid" />
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
             title="Total outstanding"
@@ -599,44 +658,231 @@ export default function Payments() {
           />
         </div>
 
-        <Card className="p-4 mb-4">
-          <div className="flex items-center justify-center">
-            <div className="flex w-full max-w-3xl gap-4">
-            <Button
-              size="lg"
-              variant={activePartyType === "customer" ? "default" : "outline"}
-              className="h-12 flex-1 text-base"
-              onClick={() => {
-                setActivePartyType("customer");
-                setOpenPartyId(null);
-              }}
-            >
-              Customers
-            </Button>
-            <Button
-              size="lg"
-              variant={activePartyType === "supplier" ? "default" : "outline"}
-              className="h-12 flex-1 text-base"
-              onClick={() => {
-                setActivePartyType("supplier");
-                setOpenPartyId(null);
-              }}
-            >
-              Suppliers
-            </Button>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <TabsList>
+              <TabsTrigger value="transactions">Transactions</TabsTrigger>
+              <TabsTrigger value="ledger">Party Ledger</TabsTrigger>
+            </TabsList>
+
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <ExportExcelButton rows={exportPaymentRows} fileName="payments" sheetName="Payments" showPrint={false} variant="outline" />
+              <Button className="gap-2" onClick={openAdd}>
+                <Plus className="w-4 h-4" />
+                Add payment
+              </Button>
+              <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
+                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
             </div>
           </div>
 
-          <div className="mt-4 flex items-center justify-end">
-            <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
-              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          </div>
-        </Card>
+          <TabsContent value="transactions" className="mt-4">
+            <Card className="p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 flex-1">
+                  <div className="lg:col-span-2">
+                    <Label htmlFor="txSearch">Search</Label>
+                    <Input
+                      id="txSearch"
+                      value={txSearch}
+                      onChange={(e) => setTxSearch(e.target.value)}
+                      placeholder="Party / reference / method / status"
+                    />
+                  </div>
 
-        <div className="space-y-3">
-          {visiblePartySummaries.map((p) => {
+                  <div>
+                    <Label>Direction</Label>
+                    <Select value={txDirection} onValueChange={(v) => setTxDirection(v as any)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="In">In</SelectItem>
+                        <SelectItem value="Out">Out</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label>Status</Label>
+                    <Select value={txStatus} onValueChange={(v) => setTxStatus(v as any)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="Completed">Completed</SelectItem>
+                        <SelectItem value="Pending">Pending</SelectItem>
+                        <SelectItem value="Failed">Failed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label>Method</Label>
+                    <Select value={txMethod} onValueChange={(v) => setTxMethod(v as any)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="Cash">Cash</SelectItem>
+                        <SelectItem value="UPI">UPI</SelectItem>
+                        <SelectItem value="Bank">Bank</SelectItem>
+                        <SelectItem value="Card">Card</SelectItem>
+                        <SelectItem value="Cheque">Cheque</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="txFrom">From</Label>
+                    <Input id="txFrom" type="date" value={txFrom} onChange={(e) => setTxFrom(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="txTo">To</Label>
+                    <Input id="txTo" type="date" value={txTo} onChange={(e) => setTxTo(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 justify-end">
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground">Showing</div>
+                    <div className="text-sm font-semibold tabular-nums">{paymentStats.count}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground">Received</div>
+                    <div className="text-sm font-semibold tabular-nums text-success">{rupees(paymentStats.received)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground">Paid</div>
+                    <div className="text-sm font-semibold tabular-nums">{rupees(paymentStats.paid)}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[110px]">Date</TableHead>
+                      <TableHead className="w-[90px]">Dir</TableHead>
+                      <TableHead>Party</TableHead>
+                      <TableHead className="w-[140px] text-right">Amount</TableHead>
+                      <TableHead className="w-[120px]">Method</TableHead>
+                      <TableHead className="w-[180px]">Reference</TableHead>
+                      <TableHead className="w-[120px]">Status</TableHead>
+                      <TableHead className="w-[110px] text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPayments.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-muted-foreground">
+                          No payments found.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredPayments.map((p) => (
+                        <TableRow key={p.id} className="cursor-pointer" onClick={() => openEdit(p)}>
+                          <TableCell>{p.date || "—"}</TableCell>
+                          <TableCell>
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                p.direction === "In" ? "bg-success/10 text-success" : "bg-warning/15 text-warning"
+                              }`}
+                            >
+                              {p.direction}
+                            </span>
+                          </TableCell>
+                          <TableCell className="min-w-[220px]">
+                            <div className="font-medium truncate">{p.partyName || "—"}</div>
+                            <div className="text-xs text-muted-foreground">{p.partyType}</div>
+                          </TableCell>
+                          <TableCell className={`text-right font-semibold tabular-nums ${p.direction === "In" ? "text-success" : ""}`}>
+                            {rupees(p.amount || 0)}
+                          </TableCell>
+                          <TableCell>{p.method}</TableCell>
+                          <TableCell className="truncate max-w-[240px]">{p.reference || "—"}</TableCell>
+                          <TableCell>
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                p.status === "Completed"
+                                  ? "bg-success/10 text-success"
+                                  : p.status === "Pending"
+                                    ? "bg-warning/15 text-warning"
+                                    : "bg-destructive/10 text-destructive"
+                              }`}
+                            >
+                              {p.status}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="inline-flex items-center gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => openEdit(p)} aria-label="Edit">
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDelete(p.id)} aria-label="Delete">
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="ledger" className="mt-4">
+            <Card className="p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="inline-flex items-center gap-2">
+                    <Button
+                      variant={activePartyType === "customer" ? "default" : "outline"}
+                      onClick={() => {
+                        setActivePartyType("customer");
+                        setOpenPartyId(null);
+                      }}
+                    >
+                      Customers
+                    </Button>
+                    <Button
+                      variant={activePartyType === "supplier" ? "default" : "outline"}
+                      onClick={() => {
+                        setActivePartyType("supplier");
+                        setOpenPartyId(null);
+                      }}
+                    >
+                      Suppliers
+                    </Button>
+                  </div>
+
+                  <div className="min-w-[280px]">
+                    <Label htmlFor="partySearch">Search party</Label>
+                    <Input
+                      id="partySearch"
+                      value={partySearch}
+                      onChange={(e) => setPartySearch(e.target.value)}
+                      placeholder={activePartyType === "customer" ? "Search customers" : "Search suppliers"}
+                    />
+                  </div>
+                </div>
+
+                <div className="text-sm text-muted-foreground">
+                  Click a metric pill to toggle details
+                </div>
+              </div>
+            </Card>
+
+            <div className="space-y-3 mt-4">
+              {visiblePartySummaries.map((p) => {
             const isOpen = openPartyId === p.id;
             const settledLabel = activePartyType === "customer" ? "Received" : "Paid";
             const dueLabel = activePartyType === "customer" ? "To Receive" : "To Pay";
@@ -748,12 +994,14 @@ export default function Payments() {
                 ) : null}
               </Card>
             );
-          })}
+              })}
 
-          {visiblePartySummaries.length === 0 ? (
-            <Card className="p-6 text-sm text-muted-foreground">No parties found.</Card>
-          ) : null}
-        </div>
+              {visiblePartySummaries.length === 0 ? (
+                <Card className="p-6 text-sm text-muted-foreground">No parties found.</Card>
+              ) : null}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

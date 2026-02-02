@@ -1,133 +1,102 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
-import { StatCard } from "@/components/cards/StatCard";
-import { DataTable } from "@/components/tables/DataTable";
-import { ExportExcelButton } from "@/components/ExportExcelButton";
-import { 
-  DollarSign, 
-  TrendingUp, 
-  TrendingDown,
-  CreditCard,
-  ArrowRight,
-  Download,
-  Filter,
-  Receipt,
-  Wallet,
-  PiggyBank
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
-import { useNavigate } from "react-router-dom";
+import {
+  addDoc,
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  Timestamp,
+} from "firebase/firestore";
+import { saveAs } from "file-saver";
+import { ArrowLeftRight, FileDown, FileText, Landmark, RefreshCw } from "lucide-react";
 
-type TabType = "overview" | "income" | "expenses" | "invoices";
+type TransactionType = "Income" | "Expense";
 
-interface Transaction {
+interface AccountingTransaction {
   id: string;
+  date: string; // YYYY-MM-DD
   description: string;
   category: string;
+  type: TransactionType;
   amount: number;
-  type: "Income" | "Expense";
-  date: string;
-  status: "Completed" | "Pending" | "Failed";
-  reference: string;
+  paymentMethod?: string;
+  bankAccountId?: string;
+  bankAccountName?: string;
+  receiver?: string;
+  createdAt?: Date;
 }
 
-interface Invoice {
+interface BankAccount {
   id: string;
-  invoiceNo: string;
-  customer: string;
-  amount: number;
-  issueDate: string;
-  dueDate: string;
-  status: "Paid" | "Pending" | "Overdue";
+  accountName: string;
+  accountNumber: string;
+  initialBalance: number;
+  createdAt?: Date;
 }
 
 const rupees = (value: number) => `₹${(value || 0).toLocaleString("en-IN")}`;
 
+function safeNumber(value: string): number {
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function formatBankNumber(accountNumber: string) {
+  const digits = (accountNumber || "").replace(/\s+/g, "").trim();
+  if (!digits) return "";
+  if (digits.length <= 4) return digits;
+  return `•••• ${digits.slice(-4)}`;
+}
+
+function escapeCsv(value: unknown): string {
+  const s = String(value ?? "");
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function escapeHtml(value: unknown): string {
+  const s = String(value ?? "");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 export default function Accounting() {
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<TabType>("overview");
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [transactions, setTransactions] = useState<AccountingTransaction[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [isManageBanksOpen, setIsManageBanksOpen] = useState(false);
+  const [bankForm, setBankForm] = useState({
+    accountName: "",
+    accountNumber: "",
+    initialBalance: "0",
+  });
+
+  const [isSelfTransferOpen, setIsSelfTransferOpen] = useState(false);
+  const [transferForm, setTransferForm] = useState({
+    fromBankId: "",
+    toBankId: "",
+    amount: "",
+    date: new Date().toISOString().slice(0, 10),
+    description: "Self transfer",
+  });
+
   const { toast } = useToast();
-
-  const transactionColumns = [
-    { key: "description" as keyof Transaction, header: "Description" },
-    { key: "category" as keyof Transaction, header: "Category" },
-    { 
-      key: "amount" as keyof Transaction, 
-      header: "Amount",
-      render: (item: Transaction) => (
-        <span className={item.type === "Income" ? "text-success font-medium" : "text-destructive font-medium"}>
-          {item.type === "Income" ? "+" : "-"}{rupees(item.amount)}
-        </span>
-      )
-    },
-    { 
-      key: "type" as keyof Transaction, 
-      header: "Type",
-      render: (item: Transaction) => (
-        <span className={`badge-type ${item.type === "Income" ? "badge-processed" : "bg-destructive/20 text-destructive"}`}>
-          {item.type}
-        </span>
-      )
-    },
-    { key: "date" as keyof Transaction, header: "Date" },
-    { 
-      key: "status" as keyof Transaction, 
-      header: "Status",
-      render: (item: Transaction) => (
-        <span className={`badge-type ${
-          item.status === "Completed" ? "badge-processed" : 
-          item.status === "Pending" ? "bg-warning/20 text-warning" : 
-          "bg-destructive/20 text-destructive"
-        }`}>
-          {item.status}
-        </span>
-      )
-    },
-    { key: "reference" as keyof Transaction, header: "Reference" },
-  ];
-
-  const invoiceColumns = [
-    { key: "invoiceNo" as keyof Invoice, header: "Invoice No." },
-    { key: "customer" as keyof Invoice, header: "Customer" },
-    { 
-      key: "amount" as keyof Invoice, 
-      header: "Amount",
-      render: (item: Invoice) => (
-        <span className="font-medium text-foreground">{rupees(item.amount)}</span>
-      )
-    },
-    { key: "issueDate" as keyof Invoice, header: "Issue Date" },
-    { key: "dueDate" as keyof Invoice, header: "Due Date" },
-    { 
-      key: "status" as keyof Invoice, 
-      header: "Status",
-      render: (item: Invoice) => (
-        <span className={`badge-type ${
-          item.status === "Paid" ? "badge-processed" : 
-          item.status === "Pending" ? "bg-warning/20 text-warning" : 
-          "bg-destructive/20 text-destructive"
-        }`}>
-          {item.status}
-        </span>
-      )
-    },
-  ];
-
-  const tabs: { key: TabType; label: string; icon: React.ElementType }[] = [
-    { key: "overview", label: "Overview", icon: DollarSign },
-    { key: "income", label: "Income", icon: TrendingUp },
-    { key: "expenses", label: "Expenses", icon: TrendingDown },
-    { key: "invoices", label: "Invoices", icon: Receipt },
-  ];
-
-  const incomeTransactions = transactions.filter(t => t.type === "Income");
-  const expenseTransactions = transactions.filter(t => t.type === "Expense");
 
   const fetchTransactions = async () => {
     const qy = query(collection(db, "transactions"), orderBy("createdAt", "desc"));
@@ -136,34 +105,40 @@ export default function Accounting() {
       const data = d.data();
       return {
         id: d.id,
+        date: (data.date || "").toString(),
         description: (data.description || "").toString(),
         category: (data.category || "General").toString(),
         amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
-        type: (data.type || "Income") as Transaction["type"],
-        date: (data.date || "").toString(),
-        status: (data.status || "Completed") as Transaction["status"],
-        reference: (data.reference || "").toString(),
-      } as Transaction;
+        type: (data.type || "Income") as TransactionType,
+        paymentMethod: (data.paymentMethod || "").toString() || undefined,
+        bankAccountId: (data.bankAccountId || "").toString() || undefined,
+        bankAccountName: (data.bankAccountName || "").toString() || undefined,
+        receiver: (data.receiver || data.partyName || "").toString() || undefined,
+        createdAt: data.createdAt?.toDate?.() || new Date(),
+      } as AccountingTransaction;
     });
     setTransactions(list);
   };
 
-  const fetchInvoices = async () => {
-    const qy = query(collection(db, "invoices"), orderBy("createdAt", "desc"));
+  const fetchBankAccounts = async () => {
+    const qy = query(collection(db, "bankAccounts"), orderBy("createdAt", "desc"));
     const snap = await getDocs(qy);
     const list = snap.docs.map((d) => {
       const data = d.data();
       return {
         id: d.id,
-        invoiceNo: (data.invoiceNo || "").toString(),
-        customer: (data.partyName || data.customer || "").toString(),
-        amount: typeof data.total === "number" ? data.total : typeof data.amount === "number" ? data.amount : parseFloat(data.total ?? data.amount) || 0,
-        issueDate: (data.issueDate || data.date || "").toString(),
-        dueDate: (data.dueDate || "").toString(),
-        status: (data.status || "Pending") as Invoice["status"],
-      } as Invoice;
+        accountName: (data.accountName || data.name || "").toString(),
+        accountNumber: (data.accountNumber || "").toString(),
+        initialBalance:
+          typeof data.initialBalance === "number"
+            ? data.initialBalance
+            : typeof data.openingBalance === "number"
+              ? data.openingBalance
+              : parseFloat(data.initialBalance ?? data.openingBalance) || 0,
+        createdAt: data.createdAt?.toDate?.() || new Date(),
+      } as BankAccount;
     });
-    setInvoices(list);
+    setBankAccounts(list.filter((b) => b.accountName));
   };
 
   const fetchAll = async () => {
@@ -177,12 +152,12 @@ export default function Accounting() {
     }
     setIsLoading(true);
     try {
-      await Promise.all([fetchTransactions(), fetchInvoices()]);
+      await Promise.all([fetchBankAccounts(), fetchTransactions()]);
     } catch (error) {
       console.error("Error loading accounting data", error);
       toast({
         title: "Load failed",
-        description: "Could not load transactions/invoices from Firestore.",
+        description: "Could not load bank accounts/transactions from Firestore.",
         variant: "destructive",
       });
     } finally {
@@ -194,237 +169,558 @@ export default function Accounting() {
     fetchAll();
   }, []);
 
-  const exportRows = useMemo(() => {
-    switch (activeTab) {
-      case "income":
-        return incomeTransactions.map((t) => ({
-          Date: t.date,
-          Type: t.type,
-          Amount: t.amount,
-          Category: t.category,
-          Description: t.description,
-          Status: t.status,
-          Reference: t.reference,
-        }));
-      case "expenses":
-        return expenseTransactions.map((t) => ({
-          Date: t.date,
-          Type: t.type,
-          Amount: t.amount,
-          Category: t.category,
-          Description: t.description,
-          Status: t.status,
-          Reference: t.reference,
-        }));
-      case "invoices":
-        return invoices.map((i) => ({
-          "Invoice No": i.invoiceNo,
-          Customer: i.customer,
-          Amount: i.amount,
-          "Issue Date": i.issueDate,
-          "Due Date": i.dueDate,
-          Status: i.status,
-        }));
-      case "overview":
-      default:
-        return transactions.map((t) => ({
-          Date: t.date,
-          Type: t.type,
-          Amount: t.amount,
-          Category: t.category,
-          Description: t.description,
-          Status: t.status,
-          Reference: t.reference,
-        }));
-    }
-  }, [activeTab, incomeTransactions, expenseTransactions]);
+  const incomeTotal = useMemo(
+    () => transactions.filter((t) => t.type === "Income").reduce((sum, t) => sum + (t.amount || 0), 0),
+    [transactions]
+  );
 
-  const exportFileName = useMemo(() => {
-    switch (activeTab) {
-      case "income":
-        return "accounting-income";
-      case "expenses":
-        return "accounting-expenses";
-      case "invoices":
-        return "accounting-invoices";
-      case "overview":
-      default:
-        return "accounting-transactions";
+  const expenseTotal = useMemo(
+    () => transactions.filter((t) => t.type === "Expense").reduce((sum, t) => sum + (t.amount || 0), 0),
+    [transactions]
+  );
+
+  const netBalance = useMemo(() => incomeTotal - expenseTotal, [incomeTotal, expenseTotal]);
+
+  const bankBalanceById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const bank of bankAccounts) {
+      map.set(bank.id, bank.initialBalance || 0);
     }
-  }, [activeTab]);
+    for (const t of transactions) {
+      if (!t.bankAccountId) continue;
+      if (!map.has(t.bankAccountId)) map.set(t.bankAccountId, 0);
+      const prev = map.get(t.bankAccountId) ?? 0;
+      const delta = t.type === "Income" ? (t.amount || 0) : -(t.amount || 0);
+      map.set(t.bankAccountId, prev + delta);
+    }
+    return map;
+  }, [bankAccounts, transactions]);
+
+  const openManageBanks = () => {
+    setBankForm({ accountName: "", accountNumber: "", initialBalance: "0" });
+    setIsManageBanksOpen(true);
+  };
+
+  const openSelfTransfer = () => {
+    setTransferForm({
+      fromBankId: bankAccounts[0]?.id || "",
+      toBankId: bankAccounts[1]?.id || "",
+      amount: "",
+      date: new Date().toISOString().slice(0, 10),
+      description: "Self transfer",
+    });
+    setIsSelfTransferOpen(true);
+  };
+
+  const createBankAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db) return;
+
+    const accountName = bankForm.accountName.trim();
+    const accountNumber = bankForm.accountNumber.trim();
+    const initialBalance = safeNumber(bankForm.initialBalance);
+
+    if (!accountName) {
+      toast({ title: "Missing account name", description: "Please enter bank account name.", variant: "destructive" });
+      return;
+    }
+    if (!accountNumber) {
+      toast({ title: "Missing account number", description: "Please enter account number.", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, "bankAccounts"), {
+        accountName,
+        accountNumber,
+        initialBalance,
+        createdAt: Timestamp.now(),
+      });
+      toast({ title: "Bank added", description: "Bank account created successfully." });
+      setIsManageBanksOpen(false);
+      fetchBankAccounts();
+    } catch (error) {
+      console.error("Error creating bank account", error);
+      toast({ title: "Create failed", description: "Could not create bank account.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const createSelfTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db) return;
+
+    const amount = safeNumber(transferForm.amount);
+    if (!transferForm.fromBankId || !transferForm.toBankId) {
+      toast({ title: "Select banks", description: "Please select From and To bank accounts.", variant: "destructive" });
+      return;
+    }
+    if (transferForm.fromBankId === transferForm.toBankId) {
+      toast({ title: "Invalid transfer", description: "From and To bank cannot be same.", variant: "destructive" });
+      return;
+    }
+    if (amount <= 0) {
+      toast({ title: "Invalid amount", description: "Transfer amount must be greater than 0.", variant: "destructive" });
+      return;
+    }
+    if (!transferForm.date) {
+      toast({ title: "Missing date", description: "Please select a date.", variant: "destructive" });
+      return;
+    }
+
+    const fromBank = bankAccounts.find((b) => b.id === transferForm.fromBankId);
+    const toBank = bankAccounts.find((b) => b.id === transferForm.toBankId);
+    if (!fromBank || !toBank) {
+      toast({ title: "Bank not found", description: "Please refresh and try again.", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const transferId = `TRF-${Date.now()}`;
+      await Promise.all([
+        addDoc(collection(db, "transactions"), {
+          date: transferForm.date,
+          description: transferForm.description || `Self transfer to ${toBank.accountName}`,
+          category: "Self Transfer",
+          amount,
+          type: "Expense",
+          status: "Completed",
+          reference: transferId,
+          partyType: "other",
+          partyName: toBank.accountName,
+          receiver: toBank.accountName,
+          paymentMethod: "Bank Transfer",
+          bankAccountId: fromBank.id,
+          bankAccountName: fromBank.accountName,
+          createdAt: Timestamp.now(),
+        }),
+        addDoc(collection(db, "transactions"), {
+          date: transferForm.date,
+          description: transferForm.description || `Self transfer from ${fromBank.accountName}`,
+          category: "Self Transfer",
+          amount,
+          type: "Income",
+          status: "Completed",
+          reference: transferId,
+          partyType: "other",
+          partyName: fromBank.accountName,
+          receiver: fromBank.accountName,
+          paymentMethod: "Bank Transfer",
+          bankAccountId: toBank.id,
+          bankAccountName: toBank.accountName,
+          createdAt: Timestamp.now(),
+        }),
+      ]);
+
+      toast({ title: "Transfer created", description: "Self transfer recorded successfully." });
+      setIsSelfTransferOpen(false);
+      fetchTransactions();
+    } catch (error) {
+      console.error("Error creating self transfer", error);
+      toast({ title: "Transfer failed", description: "Could not create transfer.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const downloadCsv = () => {
+    const headers = [
+      "Date",
+      "Description",
+      "Category",
+      "Type",
+      "Payment Method",
+      "Bank Account",
+      "Standard Receiver",
+      "Amount",
+    ];
+
+    const rows = transactions.map((t) => {
+      const bankName =
+        t.bankAccountName ||
+        (t.bankAccountId ? bankAccounts.find((b) => b.id === t.bankAccountId)?.accountName : "") ||
+        "";
+      const paymentMethod = t.paymentMethod || (t.bankAccountId ? "Bank" : "");
+      return [
+        t.date,
+        t.description,
+        t.category,
+        t.type,
+        paymentMethod,
+        bankName,
+        t.receiver || "",
+        t.amount,
+      ].map(escapeCsv);
+    });
+
+    const csv = [headers.map(escapeCsv).join(","), ...rows.map((r) => r.join(","))].join("\n");
+    saveAs(new Blob([csv], { type: "text/csv;charset=utf-8" }), `accounting-transactions-${new Date().toISOString().slice(0, 10)}.csv`);
+  };
+
+  const downloadPdf = () => {
+    const win = window.open("", "_blank", "noopener,noreferrer");
+    if (!win) {
+      toast({ title: "Popup blocked", description: "Please allow popups to export PDF.", variant: "destructive" });
+      return;
+    }
+
+    const rowsHtml = transactions
+      .map((t) => {
+        const bankName =
+          t.bankAccountName ||
+          (t.bankAccountId ? bankAccounts.find((b) => b.id === t.bankAccountId)?.accountName : "") ||
+          "";
+        const paymentMethod = t.paymentMethod || (t.bankAccountId ? "Bank" : "");
+        const amount = `${t.type === "Income" ? "+" : "-"}${rupees(t.amount)}`;
+        return `
+          <tr>
+            <td>${escapeHtml(t.date)}</td>
+            <td>${escapeHtml(t.description)}</td>
+            <td>${escapeHtml(t.category)}</td>
+            <td>${escapeHtml(t.type)}</td>
+            <td>${escapeHtml(paymentMethod)}</td>
+            <td>${escapeHtml(bankName)}</td>
+            <td>${escapeHtml(t.receiver || "")}</td>
+            <td style="text-align:right">${escapeHtml(amount)}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    win.document.write(`
+      <html>
+        <head>
+          <title>Transaction History</title>
+          <style>
+            body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; padding: 20px; }
+            h1 { font-size: 18px; margin: 0 0 10px; }
+            .meta { color: #666; font-size: 12px; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; vertical-align: top; }
+            th { background: #f5f5f5; text-align: left; }
+          </style>
+        </head>
+        <body>
+          <h1>Transaction History</h1>
+          <div class="meta">Generated on ${new Date().toLocaleString()}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Category</th>
+                <th>Type</th>
+                <th>Payment Method</th>
+                <th>Bank Account</th>
+                <th>Standard Receiver</th>
+                <th style="text-align:right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
 
   return (
     <>
-      <AppHeader title="Accounting" subtitle="Financial overview and transaction management" />
-      
-      <div className="flex-1 overflow-auto p-6">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatCard
-            title="Total Revenue"
-            value={rupees(incomeTransactions.reduce((sum, t) => sum + (t.amount || 0), 0))}
-            change="+15%"
-            changeType="positive"
-            icon={DollarSign}
-            iconBgColor="bg-success/20"
-            iconColor="text-success"
-          />
-          <StatCard
-            title="Total Expenses"
-            value={rupees(expenseTransactions.reduce((sum, t) => sum + (t.amount || 0), 0))}
-            change="+8%"
-            changeType="negative"
-            icon={CreditCard}
-            iconBgColor="bg-destructive/20"
-            iconColor="text-destructive"
-          />
-          <StatCard
-            title="Net Profit"
-            value={rupees(
-              incomeTransactions.reduce((sum, t) => sum + (t.amount || 0), 0) -
-                expenseTransactions.reduce((sum, t) => sum + (t.amount || 0), 0)
-            )}
-            change="+22%"
-            changeType="positive"
-            icon={Wallet}
-            iconBgColor="bg-primary/20"
-            iconColor="text-primary"
-          />
-          <StatCard
-            title="Pending Invoices"
-            value={rupees(invoices.filter((i) => i.status === "Pending" || i.status === "Overdue").reduce((sum, i) => sum + (i.amount || 0), 0))}
-            change={`${invoices.filter(i => i.status === "Pending" || i.status === "Overdue").length} invoices`}
-            changeType="neutral"
-            icon={PiggyBank}
-            iconBgColor="bg-warning/20"
-            iconColor="text-warning"
-          />
-        </div>
+      <AppHeader title="Accounting" subtitle="Bank accounts, transfers, and transaction history" />
 
-        {/* Main Content */}
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
-          {/* Tabs */}
-          <div className="flex items-center justify-between border-b border-border px-4">
-            <div className="flex">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`tab-item flex items-center gap-2 ${
-                    activeTab === tab.key 
-                      ? "tab-item-active" 
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <tab.icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              ))}
+      <div className="flex-1 overflow-auto p-6">
+        {/* Bank Accounts */}
+        <div className="bg-card rounded-xl border border-border overflow-hidden mb-6">
+          <div className="flex items-center justify-between border-b border-border px-6 py-4">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Bank Accounts</h2>
+              <p className="text-sm text-muted-foreground">Manage bank accounts and balances</p>
             </div>
-            <div className="flex items-center gap-2 py-2">
-              <Button variant="outline" size="sm" className="gap-2" onClick={fetchAll} disabled={isLoading}>
+
+            <div className="flex items-center gap-2">
+              <Button
+                className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={openSelfTransfer}
+                disabled={bankAccounts.length < 2}
+              >
+                <ArrowLeftRight className="w-4 h-4" />
+                Self Transfer
+              </Button>
+              <Button
+                className="gap-2 bg-blue-600 text-white hover:bg-blue-700"
+                onClick={openManageBanks}
+              >
+                <Landmark className="w-4 h-4" />
+                Manage Bank Accounts
+              </Button>
+              <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
                 <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
                 Refresh
               </Button>
-              <ExportExcelButton
-                rows={exportRows as unknown as Array<Record<string, unknown>>}
-                fileName={exportFileName}
-                sheetName="Accounting"
-                label="Export to Excel"
-                variant="outline"
-              />
             </div>
           </div>
 
           <div className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="section-title">
-                  {activeTab === "overview" && "All Transactions"}
-                  {activeTab === "income" && "Income Transactions"}
-                  {activeTab === "expenses" && "Expense Transactions"}
-                  {activeTab === "invoices" && "Invoice Management"}
-                </h2>
-                <p className="section-subtitle">
-                  {activeTab === "overview" && "Complete transaction history"}
-                  {activeTab === "income" && "Revenue from product sales and services"}
-                  {activeTab === "expenses" && "Operational and procurement expenses"}
-                  {activeTab === "invoices" && "Track and manage customer invoices"}
-                </p>
+            {bankAccounts.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border p-8 text-center">
+                <p className="text-sm text-muted-foreground">No bank accounts yet. Click “Manage Bank Accounts” to add one.</p>
               </div>
-              <Button className="gap-2">
-                {activeTab === "invoices" ? (
-                  <span className="flex items-center gap-2" onClick={() => navigate("/invoices")}>
-                    View All <ArrowRight className="w-4 h-4" />
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2" onClick={() => navigate("/transactions")}>
-                    View All <ArrowRight className="w-4 h-4" />
-                  </span>
-                )}
-              </Button>
-            </div>
-
-            {activeTab === "invoices" ? (
-              <DataTable
-                data={invoices}
-                columns={invoiceColumns}
-                keyField="id"
-              />
             ) : (
-              <DataTable
-                data={
-                  activeTab === "income" ? incomeTransactions :
-                  activeTab === "expenses" ? expenseTransactions :
-                  transactions
-                }
-                columns={transactionColumns}
-                keyField="id"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {bankAccounts.map((b) => {
+                  const bal = bankBalanceById.get(b.id) ?? 0;
+                  const balClass = bal < 0 ? "text-destructive" : "text-success";
+                  const balText = `${bal < 0 ? "-" : ""}${rupees(Math.abs(bal))}`;
+                  return (
+                    <div key={b.id} className="rounded-xl border border-border bg-background p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold tracking-wide text-foreground uppercase truncate">
+                            {b.accountName}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">{formatBankNumber(b.accountNumber)}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-muted-foreground">Current Balance</div>
+                          <div className={`text-lg font-bold ${balClass}`}>{balText}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
+
+            {/* Totals Cards */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="rounded-xl border border-border bg-destructive/10 p-5">
+                <div className="text-sm text-muted-foreground">Total Expense</div>
+                <div className="text-2xl font-bold text-destructive mt-1">{rupees(expenseTotal)}</div>
+              </div>
+              <div className="rounded-xl border border-border bg-success/10 p-5">
+                <div className="text-sm text-muted-foreground">Total Income</div>
+                <div className="text-2xl font-bold text-success mt-1">{rupees(incomeTotal)}</div>
+              </div>
+              <div className="rounded-xl border border-border bg-blue-600/10 p-5">
+                <div className="text-sm text-muted-foreground">Net Balance</div>
+                <div className="text-2xl font-bold text-blue-700 mt-1">{rupees(netBalance)}</div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Financial Summary Cards */}
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-muted-foreground">This Month</h3>
-              <TrendingUp className="w-5 h-5 text-success" />
+        {/* Transaction History */}
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border px-6 py-4">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Transaction History</h2>
+              <p className="text-sm text-muted-foreground">All entries with bank & payment details</p>
             </div>
-            <p className="text-3xl font-bold text-foreground">
-              {incomeTransactions.length > 0 
-                ? rupees(incomeTransactions.reduce((sum, t) => sum + (t.amount || 0), 0))
-                : rupees(0)}
-            </p>
-            <p className="text-sm text-success mt-1">{incomeTransactions.length} transactions</p>
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" className="gap-2" onClick={downloadCsv}>
+                <FileDown className="w-4 h-4" />
+                Download CSV
+              </Button>
+              <Button variant="outline" className="gap-2" onClick={downloadPdf}>
+                <FileText className="w-4 h-4" />
+                Download PDF
+              </Button>
+            </div>
           </div>
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-muted-foreground">Total Expenses</h3>
-              <TrendingDown className="w-5 h-5 text-destructive" />
+
+          <div className="p-6">
+            <div className="rounded-xl border border-border overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="whitespace-nowrap">Date</TableHead>
+                    <TableHead className="min-w-[220px]">Description</TableHead>
+                    <TableHead className="whitespace-nowrap">Category</TableHead>
+                    <TableHead className="whitespace-nowrap">Type</TableHead>
+                    <TableHead className="whitespace-nowrap">Payment Method</TableHead>
+                    <TableHead className="min-w-[160px]">Bank Account</TableHead>
+                    <TableHead className="min-w-[160px]">Standard Receiver</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {transactions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
+                        No transactions found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    transactions.map((t) => {
+                      const amountClass = t.type === "Income" ? "text-success" : "text-destructive";
+                      const bankName =
+                        t.bankAccountName ||
+                        (t.bankAccountId ? bankAccounts.find((b) => b.id === t.bankAccountId)?.accountName : "") ||
+                        "";
+                      const paymentMethod = t.paymentMethod || (t.bankAccountId ? "Bank" : "");
+                      return (
+                        <TableRow key={t.id}>
+                          <TableCell className="whitespace-nowrap">{t.date || "-"}</TableCell>
+                          <TableCell className="font-medium">{t.description || "-"}</TableCell>
+                          <TableCell className="whitespace-nowrap">{t.category || "-"}</TableCell>
+                          <TableCell className="whitespace-nowrap">{t.type}</TableCell>
+                          <TableCell className="whitespace-nowrap">{paymentMethod || "-"}</TableCell>
+                          <TableCell className="whitespace-nowrap">{bankName || "-"}</TableCell>
+                          <TableCell className="whitespace-nowrap">{t.receiver || "-"}</TableCell>
+                          <TableCell className={`text-right font-semibold whitespace-nowrap ${amountClass}`}>
+                            {t.type === "Income" ? "+" : "-"}{rupees(t.amount)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
             </div>
-            <p className="text-3xl font-bold text-foreground">
-              {expenseTransactions.length > 0 
-                ? rupees(expenseTransactions.reduce((sum, t) => sum + (t.amount || 0), 0))
-                : rupees(0)}
-            </p>
-            <p className="text-sm text-destructive mt-1">{expenseTransactions.length} transactions</p>
-          </div>
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-muted-foreground">Outstanding</h3>
-              <Receipt className="w-5 h-5 text-warning" />
-            </div>
-            <p className="text-3xl font-bold text-foreground">
-              {invoices.filter(i => i.status !== "Paid").length > 0 
-                ? rupees(invoices.filter(i => i.status !== "Paid").reduce((sum, i) => sum + (i.amount || 0), 0))
-                : rupees(0)}
-            </p>
-            <p className="text-sm text-warning mt-1">{invoices.filter(i => i.status !== "Paid").length} pending invoices</p>
           </div>
         </div>
       </div>
+
+      {/* Manage Bank Accounts Dialog */}
+      <Dialog open={isManageBanksOpen} onOpenChange={setIsManageBanksOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manage Bank Accounts</DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={createBankAccount} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <Label>Account Name</Label>
+                <Input
+                  value={bankForm.accountName}
+                  onChange={(e) => setBankForm((s) => ({ ...s, accountName: e.target.value }))}
+                  placeholder="e.g. HDFC Current"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Account Number</Label>
+                <Input
+                  value={bankForm.accountNumber}
+                  onChange={(e) => setBankForm((s) => ({ ...s, accountNumber: e.target.value }))}
+                  placeholder="e.g. 1234567890"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Initial Balance</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  value={bankForm.initialBalance}
+                  onChange={(e) => setBankForm((s) => ({ ...s, initialBalance: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsManageBanksOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Adding..." : "Add Bank Account"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Self Transfer Dialog */}
+      <Dialog open={isSelfTransferOpen} onOpenChange={setIsSelfTransferOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Self Transfer</DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={createSelfTransfer} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>From Bank</Label>
+                <Select value={transferForm.fromBankId} onValueChange={(v) => setTransferForm((s) => ({ ...s, fromBankId: v }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select bank" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bankAccounts.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.accountName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>To Bank</Label>
+                <Select value={transferForm.toBankId} onValueChange={(v) => setTransferForm((s) => ({ ...s, toBankId: v }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select bank" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bankAccounts.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.accountName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Amount</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  value={transferForm.amount}
+                  onChange={(e) => setTransferForm((s) => ({ ...s, amount: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={transferForm.date}
+                  onChange={(e) => setTransferForm((s) => ({ ...s, date: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input
+                value={transferForm.description}
+                onChange={(e) => setTransferForm((s) => ({ ...s, description: e.target.value }))}
+                placeholder="Self transfer"
+              />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsSelfTransferOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting || bankAccounts.length < 2}>
+                {isSubmitting ? "Creating..." : "Create Transfer"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

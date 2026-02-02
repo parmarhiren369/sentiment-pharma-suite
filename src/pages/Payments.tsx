@@ -75,6 +75,7 @@ type InvoiceStatus = string;
 interface InvoiceRecord {
   id: string;
   invoiceNo: string;
+  manualInvoiceNo?: string;
   partyType: PartyType;
   partyId: string;
   partyName: string;
@@ -162,12 +163,15 @@ export default function Payments() {
     return partyOptions.find((p) => p.id === formData.partyId);
   }, [formData.partyId, formData.partyName, formData.partyType, partyOptions]);
 
+  const CURRENCY = "₹";
+
   const amountText = (n: number): string => {
     const value = Number.isFinite(n) ? n : 0;
-    return value.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const money = (n: number): string => `KSh ${amountText(n)}`;
+  const rupees = (n: number): string => `${CURRENCY}${amountText(n)}`;
+  const money = (n: number): string => rupees(n);
 
   const isOverdueInvoice = (inv: InvoiceRecord): boolean => {
     if ((inv.status || "").toLowerCase() === "paid") return false;
@@ -299,6 +303,7 @@ export default function Payments() {
         return {
           id: d.id,
           invoiceNo: (data.invoiceNo || "").toString(),
+          manualInvoiceNo: (data.manualInvoiceNo || "").toString() || undefined,
           partyType: ((data.partyType || "customer") as PartyType) || "customer",
           partyId: (data.partyId || "").toString(),
           partyName: (data.partyName || "").toString(),
@@ -405,11 +410,13 @@ export default function Payments() {
       status: InvoiceTxStatus;
     };
 
+    const norm = (v: unknown) => (v ?? "").toString().trim().toLowerCase();
+
     const byDateAsc = [...summary.invoices].sort((a, b) => (a.issueDate || "").localeCompare(b.issueDate || ""));
 
     const notesByInvoiceNo = new Map<string, { debit: number; credit: number }>();
     for (const n of summary.notes) {
-      const invNo = (n.relatedInvoiceNo || "").trim();
+      const invNo = norm(n.relatedInvoiceNo);
       if (!invNo) continue;
       const cur = notesByInvoiceNo.get(invNo) || { debit: 0, credit: 0 };
       if (n.noteType === "Debit") cur.debit += Number(n.amount) || 0;
@@ -417,17 +424,41 @@ export default function Payments() {
       notesByInvoiceNo.set(invNo, cur);
     }
 
-    // Allocate total settled amount across invoices (FIFO) when payments are not linked to specific invoices.
-    let remainingToAllocate = Number(summary.settled) || 0;
+    const settledDirection: PaymentDirection = activePartyType === "customer" ? "In" : "Out";
+    const relevantPayments = summary.payments.filter((p) => p.direction === settledDirection);
+
+    const paymentMatchesInvoice = (payment: PaymentRecord, systemInvoiceNo: string, manualInvoiceNo?: string) => {
+      const ref = norm(payment.reference);
+      if (!ref) return false;
+      const sys = norm(systemInvoiceNo);
+      const man = norm(manualInvoiceNo);
+      return (sys && ref.includes(sys)) || (man && ref.includes(man));
+    };
+
+    const noteAdjustForInvoice = (systemInvoiceNo: string, manualInvoiceNo?: string) => {
+      const sysKey = norm(systemInvoiceNo);
+      const manKey = norm(manualInvoiceNo);
+      const a = sysKey ? notesByInvoiceNo.get(sysKey) : undefined;
+      const b = manKey ? notesByInvoiceNo.get(manKey) : undefined;
+      return {
+        debit: (a?.debit || 0) + (b?.debit || 0),
+        credit: (a?.credit || 0) + (b?.credit || 0),
+      };
+    };
 
     return byDateAsc.map((inv) => {
-      const invoiceNo = (inv.invoiceNo || "").toString();
-      const noteAdjust = notesByInvoiceNo.get(invoiceNo) || { debit: 0, credit: 0 };
+      const systemInvoiceNo = (inv.invoiceNo || "").toString();
+      const manualInvoiceNo = inv.manualInvoiceNo;
+      const displayInvoiceNo = manualInvoiceNo || systemInvoiceNo;
+
+      const noteAdjust = noteAdjustForInvoice(systemInvoiceNo, manualInvoiceNo);
       const baseTotal = Number(inv.total) || 0;
       const adjustedTotal = Math.max(0, baseTotal + noteAdjust.debit - noteAdjust.credit);
 
-      const paid = Math.min(adjustedTotal, Math.max(0, remainingToAllocate));
-      remainingToAllocate = Math.max(0, remainingToAllocate - paid);
+      const paidRaw = relevantPayments
+        .filter((p) => paymentMatchesInvoice(p, systemInvoiceNo, manualInvoiceNo))
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      const paid = Math.min(adjustedTotal, Math.max(0, paidRaw));
 
       const amountRemaining = Math.max(0, adjustedTotal - paid);
       const status: InvoiceTxStatus = amountRemaining <= 0 ? "Paid" : paid > 0 ? "Partially Paid" : "Unpaid";
@@ -438,7 +469,7 @@ export default function Payments() {
         invoiceId: inv.id,
         date: inv.issueDate || inv.dueDate || "",
         type: typeLabel,
-        invoiceNo,
+        invoiceNo: displayInvoiceNo,
         amountPaid: paid,
         amountRemaining,
         totalAmount: adjustedTotal,
@@ -729,7 +760,7 @@ export default function Payments() {
               <div>
                 <div className="text-sm text-muted-foreground">Total Outstanding</div>
                 <div className="mt-2 leading-tight">
-                  <div className="text-base font-bold text-foreground">KSh</div>
+                  <div className="text-base font-bold text-foreground">₹</div>
                   <div className="text-3xl font-extrabold tabular-nums">{amountText(topStats.totalOutstanding)}</div>
                 </div>
               </div>
@@ -1004,7 +1035,15 @@ export default function Payments() {
                                     variant="ghost"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      window.open(`/invoices/${r.invoiceId}/print`, "_blank", "noopener,noreferrer");
+                                      const url = new URL(`/invoices/${r.invoiceId}/print`, window.location.origin).toString();
+                                      const w = window.open(url, "_blank", "noopener,noreferrer");
+                                      if (!w) {
+                                        toast({
+                                          title: "Popup blocked",
+                                          description: "Please allow popups to print the invoice.",
+                                          variant: "destructive",
+                                        });
+                                      }
                                     }}
                                   >
                                     Print

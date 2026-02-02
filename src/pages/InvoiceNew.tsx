@@ -28,6 +28,8 @@ interface InvoiceLineItem {
   unit: string;
   quantity: number;
   rate: number;
+  taxType?: "CGST / SGST" | "JGST";
+  tax?: number;
 }
 
 interface PartyOption {
@@ -101,9 +103,12 @@ export default function InvoiceNew() {
   }, [formData.subtotal, lineItems]);
 
   const computedTaxAmount = useMemo(() => {
+    if (lineItems.length) {
+      return Math.max(0, lineItems.reduce((sum, it) => sum + (Number(it.tax) || 0), 0));
+    }
     const pct = safeNumber(formData.taxPercent);
     return Math.max(0, (computedSubtotal * pct) / 100);
-  }, [computedSubtotal, formData.taxPercent]);
+  }, [computedSubtotal, formData.taxPercent, lineItems]);
 
   const computedTotal = useMemo(() => {
     return Math.max(0, computedSubtotal + computedTaxAmount);
@@ -202,7 +207,8 @@ export default function InvoiceNew() {
     }
 
     const taxPercent = safeNumber(formData.taxPercent);
-    if (computedSubtotal < 0 || taxPercent < 0) {
+    const effectiveTaxPercent = lineItems.length ? 0 : taxPercent;
+    if (computedSubtotal < 0 || effectiveTaxPercent < 0 || computedTaxAmount < 0) {
       toast({ title: "Validation error", description: "Amounts cannot be negative.", variant: "destructive" });
       return;
     }
@@ -214,6 +220,8 @@ export default function InvoiceNew() {
         unit: (it.unit || "").toString() || "pcs",
         quantity: Number(it.quantity) || 0,
         rate: Number(it.rate) || 0,
+        taxType: it.taxType || "CGST / SGST",
+        tax: Math.max(0, Number(it.tax) || 0),
       }))
       .filter((it) => it.processedInventoryId && it.name && it.quantity > 0);
 
@@ -246,7 +254,7 @@ export default function InvoiceNew() {
       issueDate: formData.issueDate,
       items: sanitizedItems,
       subtotal: computedSubtotal,
-      taxPercent,
+      taxPercent: effectiveTaxPercent,
       tax: computedTaxAmount,
       total: computedTotal,
       status: formData.status,
@@ -420,7 +428,12 @@ export default function InvoiceNew() {
                 type="button"
                 variant="outline"
                 className="gap-2"
-                onClick={() => setLineItems((prev) => [...prev, { processedInventoryId: "", name: "", unit: "pcs", quantity: 1, rate: 0 }])}
+                onClick={() =>
+                  setLineItems((prev) => [
+                    ...prev,
+                    { processedInventoryId: "", name: "", unit: "pcs", quantity: 1, rate: 0, taxType: "CGST / SGST", tax: 0 },
+                  ])
+                }
               >
                 <Plus className="w-4 h-4" />
                 Add Item
@@ -432,11 +445,15 @@ export default function InvoiceNew() {
             ) : (
               <div className="space-y-2">
                 {lineItems.map((it, idx) => {
-                  const resolved = it.processedInventoryId ? processedInventoryById.get(it.processedInventoryId) : undefined;
-                  const amount = (Number(it.quantity) || 0) * (Number(it.rate) || 0);
+                  const baseAmount = (Number(it.quantity) || 0) * (Number(it.rate) || 0);
+                  const taxAmount = Number(it.tax) || 0;
+                  const type = it.taxType || "CGST / SGST";
+                  const cgstAmount = type === "CGST / SGST" ? taxAmount / 2 : 0;
+                  const sgstAmount = type === "CGST / SGST" ? taxAmount / 2 : 0;
+                  const amount = baseAmount + taxAmount;
 
                   return (
-                    <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+                    <div key={idx} className="grid grid-cols-1 md:grid-cols-[repeat(17,minmax(0,1fr))] gap-2 items-end">
                       <div className="md:col-span-5 space-y-1">
                         <Label className="text-xs text-muted-foreground">Item</Label>
                         <Select
@@ -501,6 +518,45 @@ export default function InvoiceNew() {
                         />
                       </div>
 
+                      <div className="md:col-span-2 space-y-1">
+                        <Label className="text-xs text-muted-foreground">Type</Label>
+                        <Select
+                          value={type}
+                          onValueChange={(v) => setLineItems((prev) => prev.map((x, i) => (i === idx ? { ...x, taxType: v as any } : x)))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="CGST / SGST">CGST / SGST</SelectItem>
+                            <SelectItem value="JGST">JGST</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="md:col-span-1 space-y-1">
+                        <Label className="text-xs text-muted-foreground">TAX</Label>
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          value={String(it.tax ?? 0)}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value);
+                            setLineItems((prev) => prev.map((x, i) => (i === idx ? { ...x, tax: Number.isFinite(v) ? v : 0 } : x)));
+                          }}
+                        />
+                      </div>
+
+                      <div className="md:col-span-1 space-y-1">
+                        <Label className="text-xs text-muted-foreground">CGST</Label>
+                        <Input value={cgstAmount.toFixed(2)} readOnly />
+                      </div>
+
+                      <div className="md:col-span-1 space-y-1">
+                        <Label className="text-xs text-muted-foreground">SGST</Label>
+                        <Input value={sgstAmount.toFixed(2)} readOnly />
+                      </div>
+
                       <div className="md:col-span-1 space-y-1">
                         <Label className="text-xs text-muted-foreground">Amt</Label>
                         <Input value={amount.toFixed(2)} readOnly />
@@ -562,9 +618,13 @@ export default function InvoiceNew() {
                   id="taxPercent"
                   type="number"
                   inputMode="decimal"
-                  value={formData.taxPercent}
-                  onChange={(e) => setFormData((s) => ({ ...s, taxPercent: e.target.value }))}
+                  value={lineItems.length > 0 ? "0" : formData.taxPercent}
+                  onChange={(e) => {
+                    if (lineItems.length > 0) return;
+                    setFormData((s) => ({ ...s, taxPercent: e.target.value }));
+                  }}
                   placeholder="0"
+                  readOnly={lineItems.length > 0}
                 />
               </div>
 

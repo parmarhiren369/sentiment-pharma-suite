@@ -468,7 +468,6 @@ export default function InvoiceNew() {
                             ))}
                           </SelectContent>
                         </Select>
-                        <div className="text-xs text-muted-foreground">{resolved?.unit ? `Unit: ${resolved.unit}` : ""}</div>
                       </div>
 
                       <div className="md:col-span-2 space-y-1">

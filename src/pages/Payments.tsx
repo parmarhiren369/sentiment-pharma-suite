@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { StatCard } from "@/components/cards/StatCard";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,7 +18,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -24,22 +25,20 @@ import {
   orderBy,
   query,
   Timestamp,
-  updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import {
   ChevronDown,
   ChevronRight,
   Clock,
-  DollarSign,
   Filter,
   HandCoins,
   Plus,
   Printer,
   RefreshCw,
   Search,
-  TrendingDown,
-  TrendingUp,
   Users,
+  Wallet,
 } from "lucide-react";
 
 type InvoiceTxStatus = "Paid" | "Partially Paid" | "Unpaid";
@@ -63,9 +62,17 @@ interface PaymentRecord {
   bankAccountId?: string;
   bankAccountName?: string;
   bankTransferCharge?: number;
+  accountingTxId?: string;
+  bankChargeTxId?: string;
   notes?: string;
   status: PaymentStatus;
   createdAt?: Date;
+}
+
+interface BankAccount {
+  id: string;
+  accountName: string;
+  accountNumber?: string;
 }
 
 interface PartyOption {
@@ -301,6 +308,8 @@ export default function Payments() {
         bankAccountName: (data.bankAccountName || "").toString() || undefined,
         bankTransferCharge:
           typeof data.bankTransferCharge === "number" ? data.bankTransferCharge : parseFloat(data.bankTransferCharge) || 0,
+        accountingTxId: (data.accountingTxId || "").toString() || undefined,
+        bankChargeTxId: (data.bankChargeTxId || "").toString() || undefined,
         notes: (data.notes || "").toString() || undefined,
         status: (data.status || "Completed") as PaymentStatus,
         createdAt: data.createdAt?.toDate?.() || new Date(),
@@ -317,7 +326,7 @@ export default function Payments() {
         const data = d.data();
         return {
           id: d.id,
-          accountName: (data.accountName || "").toString(),
+          accountName: (data.accountName || data.name || "").toString(),
           accountNumber: (data.accountNumber || "").toString() || undefined,
         } as BankAccount;
       })
@@ -383,7 +392,7 @@ export default function Payments() {
 
     setIsLoading(true);
     try {
-      await Promise.all([fetchParties(), fetchPayments(), fetchInvoices(), fetchNotes()]);
+      await Promise.all([fetchParties(), fetchPayments(), fetchInvoices(), fetchNotes(), fetchBankAccounts()]);
     } catch (error) {
       console.error("Error fetching payments", error);
       toast({
@@ -639,7 +648,15 @@ export default function Payments() {
     if (!db) return;
     if (!confirm("Delete this payment?")) return;
 
+    const existing = payments.find((p) => p.id === id);
+
     try {
+      if (existing?.accountingTxId) {
+        await deleteDoc(doc(db, "transactions", existing.accountingTxId));
+      }
+      if (existing?.bankChargeTxId) {
+        await deleteDoc(doc(db, "transactions", existing.bankChargeTxId));
+      }
       await deleteDoc(doc(db, "payments", id));
       toast({ title: "Deleted", description: "Payment removed." });
       fetchPayments();
@@ -714,16 +731,159 @@ export default function Payments() {
       updatedAt: Timestamp.now(),
     };
 
+    const needsBankTx =
+      payload.status === "Completed" &&
+      (payload.method === "Bank" || payload.method === "Bank Transfer") &&
+      !!payload.bankAccountId;
+
+    const needsBankChargeTx = needsBankTx && (payload.bankTransferCharge || 0) > 0;
+
     setIsSubmitting(true);
     try {
+      const batch = writeBatch(db);
+      const now = Timestamp.now();
+
       if (editing) {
-        await updateDoc(doc(db, "payments", editing.id), payload);
+        const paymentRef = doc(db, "payments", editing.id);
+
+        let nextAccountingTxId = editing.accountingTxId || "";
+        let nextBankChargeTxId = editing.bankChargeTxId || "";
+
+        if (needsBankTx) {
+          if (!nextAccountingTxId) {
+            const txRef = doc(collection(db, "transactions"));
+            nextAccountingTxId = txRef.id;
+            batch.set(txRef, {
+              date: payload.date,
+              description: `Payment ${payload.direction === "In" ? "Received" : "Paid"} - ${payload.partyName || ""}`,
+              category: "Payments",
+              type: payload.direction === "In" ? "Income" : "Expense",
+              amount: payload.amount,
+              paymentMethod: payload.method,
+              bankAccountId: payload.bankAccountId,
+              bankAccountName: payload.bankAccountName,
+              receiver: payload.partyName || "",
+              reference: payload.reference || "",
+              createdAt: now,
+              updatedAt: now,
+            });
+          } else {
+            batch.update(doc(db, "transactions", nextAccountingTxId), {
+              date: payload.date,
+              description: `Payment ${payload.direction === "In" ? "Received" : "Paid"} - ${payload.partyName || ""}`,
+              category: "Payments",
+              type: payload.direction === "In" ? "Income" : "Expense",
+              amount: payload.amount,
+              paymentMethod: payload.method,
+              bankAccountId: payload.bankAccountId,
+              bankAccountName: payload.bankAccountName,
+              receiver: payload.partyName || "",
+              reference: payload.reference || "",
+              updatedAt: now,
+            });
+          }
+        } else if (nextAccountingTxId) {
+          batch.delete(doc(db, "transactions", nextAccountingTxId));
+          nextAccountingTxId = "";
+        }
+
+        if (needsBankChargeTx) {
+          if (!nextBankChargeTxId) {
+            const chargeRef = doc(collection(db, "transactions"));
+            nextBankChargeTxId = chargeRef.id;
+            batch.set(chargeRef, {
+              date: payload.date,
+              description: `Bank charges - ${payload.partyName || ""}`,
+              category: "Bank Charges",
+              type: "Expense",
+              amount: payload.bankTransferCharge || 0,
+              paymentMethod: payload.method,
+              bankAccountId: payload.bankAccountId,
+              bankAccountName: payload.bankAccountName,
+              receiver: payload.partyName || "",
+              reference: payload.reference || "",
+              createdAt: now,
+              updatedAt: now,
+            });
+          } else {
+            batch.update(doc(db, "transactions", nextBankChargeTxId), {
+              date: payload.date,
+              description: `Bank charges - ${payload.partyName || ""}`,
+              category: "Bank Charges",
+              type: "Expense",
+              amount: payload.bankTransferCharge || 0,
+              paymentMethod: payload.method,
+              bankAccountId: payload.bankAccountId,
+              bankAccountName: payload.bankAccountName,
+              receiver: payload.partyName || "",
+              reference: payload.reference || "",
+              updatedAt: now,
+            });
+          }
+        } else if (nextBankChargeTxId) {
+          batch.delete(doc(db, "transactions", nextBankChargeTxId));
+          nextBankChargeTxId = "";
+        }
+
+        batch.update(paymentRef, {
+          ...payload,
+          accountingTxId: nextAccountingTxId,
+          bankChargeTxId: nextBankChargeTxId,
+        });
+
+        await batch.commit();
         toast({ title: "Updated", description: "Payment updated." });
       } else {
-        await addDoc(collection(db, "payments"), {
+        const paymentRef = doc(collection(db, "payments"));
+        let accountingTxId = "";
+        let bankChargeTxId = "";
+
+        if (needsBankTx) {
+          const txRef = doc(collection(db, "transactions"));
+          accountingTxId = txRef.id;
+          batch.set(txRef, {
+            date: payload.date,
+            description: `Payment ${payload.direction === "In" ? "Received" : "Paid"} - ${payload.partyName || ""}`,
+            category: "Payments",
+            type: payload.direction === "In" ? "Income" : "Expense",
+            amount: payload.amount,
+            paymentMethod: payload.method,
+            bankAccountId: payload.bankAccountId,
+            bankAccountName: payload.bankAccountName,
+            receiver: payload.partyName || "",
+            reference: payload.reference || "",
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        if (needsBankChargeTx) {
+          const chargeRef = doc(collection(db, "transactions"));
+          bankChargeTxId = chargeRef.id;
+          batch.set(chargeRef, {
+            date: payload.date,
+            description: `Bank charges - ${payload.partyName || ""}`,
+            category: "Bank Charges",
+            type: "Expense",
+            amount: payload.bankTransferCharge || 0,
+            paymentMethod: payload.method,
+            bankAccountId: payload.bankAccountId,
+            bankAccountName: payload.bankAccountName,
+            receiver: payload.partyName || "",
+            reference: payload.reference || "",
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        batch.set(paymentRef, {
           ...payload,
-          createdAt: Timestamp.now(),
+          accountingTxId,
+          bankChargeTxId,
+          createdAt: now,
         });
+
+        await batch.commit();
         toast({ title: "Saved", description: "Payment saved to Firestore." });
       }
 
@@ -744,30 +904,18 @@ export default function Payments() {
 
   return (
     <>
-      <div className="flex-1 overflow-auto p-6 space-y-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
-              <DollarSign className="h-6 w-6" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold tracking-tight">Payment Tracking</div>
-              <div className="text-sm text-muted-foreground">
-                Track payments and outstanding balances for customers and suppliers
-              </div>
-            </div>
-          </div>
+      <AppHeader title="Payments" subtitle="Track payments received and paid" />
 
-          <div className="flex items-center gap-2 justify-end">
-            <Button type="button" variant="outline" className="gap-2 h-10" onClick={() => setFiltersOpen((v) => !v)}>
-              <Filter className="h-4 w-4" />
-              Filter
-            </Button>
-            <Button variant="outline" className="gap-2 h-10" onClick={fetchAll} disabled={isLoading}>
-              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          </div>
+      <div className="flex-1 overflow-auto p-6 space-y-5">
+        <div className="flex items-center justify-end gap-2">
+          <Button type="button" variant="outline" className="gap-2 h-10" onClick={() => setFiltersOpen((v) => !v)}>
+            <Filter className="h-4 w-4" />
+            Filter
+          </Button>
+          <Button variant="outline" className="gap-2 h-10" onClick={fetchAll} disabled={isLoading}>
+            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
         </div>
 
         {filtersOpen ? (
@@ -815,53 +963,42 @@ export default function Payments() {
         ) : null}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-5 rounded-2xl shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-sm text-muted-foreground">Total Outstanding</div>
-                <div className="mt-2 leading-tight">
-                  <div className="text-base font-bold text-foreground">₹</div>
-                  <div className="text-3xl font-extrabold tabular-nums">{amountText(topStats.totalOutstanding)}</div>
-                </div>
-              </div>
-              <div className="h-10 w-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
-                <TrendingUp className="h-5 w-5" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-5 rounded-2xl shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-sm text-muted-foreground">Overdue Amount</div>
-                <div className="mt-2 text-2xl font-extrabold tabular-nums text-destructive">{money(topStats.overdueAmount)}</div>
-              </div>
-              <div className="h-10 w-10 rounded-xl bg-red-100 text-red-700 flex items-center justify-center">
-                <TrendingDown className="h-5 w-5" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-5 rounded-2xl shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-sm text-muted-foreground">Advance Payments</div>
-                <div className="mt-2 text-2xl font-extrabold tabular-nums text-emerald-700">{money(topStats.advancePayments)}</div>
-              </div>
-              <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                <HandCoins className="h-5 w-5" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-5 rounded-2xl shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-sm text-muted-foreground">Active Parties</div>
-                <div className="mt-2 text-3xl font-extrabold tabular-nums text-purple-700">{topStats.activeCount}</div>
-              </div>
-              <div className="h-10 w-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
-                <Users className="h-5 w-5" />
-              </div>
-            </div>
-          </Card>
+          <StatCard
+            title="Total outstanding"
+            value={money(topStats.totalOutstanding)}
+            change={activePartyType === "customer" ? "To receive" : "To pay"}
+            changeType="neutral"
+            icon={Wallet}
+            iconBgColor="bg-warning/20"
+            iconColor="text-warning"
+          />
+          <StatCard
+            title="Overdue amount"
+            value={money(topStats.overdueAmount)}
+            change="Past due"
+            changeType="negative"
+            icon={Clock}
+            iconBgColor="bg-destructive/20"
+            iconColor="text-destructive"
+          />
+          <StatCard
+            title="Advance payments"
+            value={money(topStats.advancePayments)}
+            change="Extra paid"
+            changeType="positive"
+            icon={HandCoins}
+            iconBgColor="bg-success/20"
+            iconColor="text-success"
+          />
+          <StatCard
+            title="Active parties"
+            value={topStats.activeCount}
+            change={activePartyType === "customer" ? "Customers" : "Suppliers"}
+            changeType="neutral"
+            icon={Users}
+            iconBgColor="bg-primary/20"
+            iconColor="text-primary"
+          />
         </div>
 
         <Card className="p-4 rounded-2xl shadow-sm">

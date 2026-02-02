@@ -115,6 +115,15 @@ function safeNumber(value: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function partyShortCode(name: string): string {
+  const first = (name || "").trim().split(/\s+/)[0] || "";
+  if (!first) return "";
+
+  const lettersOnly = first.replace(/[^a-zA-Z]/g, "").toUpperCase();
+  if (lettersOnly.startsWith("AL")) return "AL";
+  return lettersOnly.slice(0, 3);
+}
+
 export default function Payments() {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [customers, setCustomers] = useState<PartyOption[]>([]);
@@ -151,10 +160,12 @@ export default function Payments() {
     return partyOptions.find((p) => p.id === formData.partyId);
   }, [formData.partyId, formData.partyName, formData.partyType, partyOptions]);
 
-  const rupees = (n: number): string => {
+  const amountText = (n: number): string => {
     const value = Number.isFinite(n) ? n : 0;
-    return `₹${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return value.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
+
+  const money = (n: number): string => `KSh ${amountText(n)}`;
 
   const isOverdueInvoice = (inv: InvoiceRecord): boolean => {
     if ((inv.status || "").toLowerCase() === "paid") return false;
@@ -601,16 +612,11 @@ export default function Payments() {
           </div>
 
           <div className="flex items-center gap-2 justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              onClick={() => setFiltersOpen((v) => !v)}
-            >
+            <Button type="button" variant="outline" className="gap-2 h-10" onClick={() => setFiltersOpen((v) => !v)}>
               <Filter className="h-4 w-4" />
               Filter
             </Button>
-            <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
+            <Button variant="outline" className="gap-2 h-10" onClick={fetchAll} disabled={isLoading}>
               <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
@@ -662,44 +668,47 @@ export default function Payments() {
         ) : null}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-5">
+          <Card className="p-5 rounded-2xl shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-sm text-muted-foreground">Total Outstanding</div>
-                <div className="mt-2 text-2xl font-extrabold tabular-nums">{rupees(topStats.totalOutstanding)}</div>
+                <div className="mt-2 leading-tight">
+                  <div className="text-base font-bold text-foreground">KSh</div>
+                  <div className="text-3xl font-extrabold tabular-nums">{amountText(topStats.totalOutstanding)}</div>
+                </div>
               </div>
               <div className="h-10 w-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
                 <TrendingUp className="h-5 w-5" />
               </div>
             </div>
           </Card>
-          <Card className="p-5">
+          <Card className="p-5 rounded-2xl shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-sm text-muted-foreground">Overdue Amount</div>
-                <div className="mt-2 text-2xl font-extrabold tabular-nums text-destructive">{rupees(topStats.overdueAmount)}</div>
+                <div className="mt-2 text-2xl font-extrabold tabular-nums text-destructive">{money(topStats.overdueAmount)}</div>
               </div>
               <div className="h-10 w-10 rounded-xl bg-red-100 text-red-700 flex items-center justify-center">
                 <TrendingDown className="h-5 w-5" />
               </div>
             </div>
           </Card>
-          <Card className="p-5">
+          <Card className="p-5 rounded-2xl shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-sm text-muted-foreground">Advance Payments</div>
-                <div className="mt-2 text-2xl font-extrabold tabular-nums text-emerald-700">{rupees(topStats.advancePayments)}</div>
+                <div className="mt-2 text-2xl font-extrabold tabular-nums text-emerald-700">{money(topStats.advancePayments)}</div>
               </div>
               <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
                 <HandCoins className="h-5 w-5" />
               </div>
             </div>
           </Card>
-          <Card className="p-5">
+          <Card className="p-5 rounded-2xl shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-sm text-muted-foreground">Active Parties</div>
-                <div className="mt-2 text-2xl font-extrabold tabular-nums text-purple-700">{topStats.activeCount}</div>
+                <div className="mt-2 text-3xl font-extrabold tabular-nums text-purple-700">{topStats.activeCount}</div>
               </div>
               <div className="h-10 w-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
                 <Users className="h-5 w-5" />
@@ -708,8 +717,8 @@ export default function Payments() {
           </Card>
         </div>
 
-        <Card className="p-4">
-          <div className="rounded-xl border bg-muted/20 p-1 grid grid-cols-2 gap-1">
+        <Card className="p-4 rounded-2xl shadow-sm">
+          <div className="rounded-xl border bg-muted/10 p-1 grid grid-cols-2 gap-1">
             <Button
               type="button"
               className={activePartyType === "customer" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-transparent hover:bg-background"}
@@ -745,7 +754,7 @@ export default function Payments() {
           </div>
         </Card>
 
-        <Card className="p-0 overflow-hidden">
+        <Card className="p-0 overflow-hidden rounded-2xl shadow-sm">
           <div className="divide-y">
             {visiblePartySummaries.map((p) => {
             const isOpen = openPartyId === p.id;
@@ -765,6 +774,8 @@ export default function Payments() {
             const isActive =
               p.totalInvoiced > 0 || p.settled > 0 || p.creditAdjustments > 0 || p.debitAdjustments > 0;
 
+            const shortCode = partyShortCode(p.name);
+
             return (
               <div key={p.id} className={`px-4 py-4 border-l-4 ${accentClass}`}>
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -781,6 +792,9 @@ export default function Payments() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="font-extrabold tracking-wide uppercase truncate">{p.name}</div>
+                        {shortCode ? (
+                          <span className="text-xs font-semibold text-muted-foreground">{shortCode}</span>
+                        ) : null}
                         {isActive ? (
                           <span className="rounded-full bg-blue-100 text-blue-700 text-[11px] px-2 py-0.5 font-semibold">
                             ACTIVE
@@ -799,20 +813,20 @@ export default function Payments() {
 
                       <div className="mt-2 flex flex-wrap gap-x-8 gap-y-2 text-sm">
                         <div className="text-muted-foreground">
-                          Total Invoiced: <span className="text-foreground font-medium">{rupees(p.totalInvoiced)}</span>
+                          Total Invoiced: <span className="text-foreground font-medium">{money(p.totalInvoiced)}</span>
                         </div>
                         <div className="text-muted-foreground">
-                          {settledLabel}: <span className="font-medium text-emerald-700">{rupees(p.settled)}</span>
+                          {settledLabel}: <span className="font-medium text-emerald-700">{money(p.settled)}</span>
                         </div>
                         <div className="text-muted-foreground">
-                          Returns/Adjustments: <span className="font-medium text-purple-700">{rupees(p.creditAdjustments)}</span>
+                          Returns/Adjustments: <span className="font-medium text-purple-700">{money(p.creditAdjustments)}</span>
                         </div>
                         <div className="text-muted-foreground">
-                          {dueLabel}: <span className="font-semibold text-destructive">{rupees(p.outstanding)}</span>
+                          {dueLabel}: <span className="font-semibold text-orange-600">{money(p.outstanding)}</span>
                         </div>
                         {p.advance > 0 ? (
                           <div className="text-muted-foreground">
-                            Advance Balance: <span className="font-medium text-blue-700">{rupees(p.advance)}</span>
+                            Advance Balance: <span className="font-medium text-blue-700">{money(p.advance)}</span>
                           </div>
                         ) : null}
                       </div>
@@ -822,7 +836,10 @@ export default function Payments() {
                   <div className="flex items-center gap-2 justify-end">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button type="button" variant="secondary" className="gap-2">
+                        <Button
+                          type="button"
+                          className="gap-2 bg-slate-700 text-white hover:bg-slate-800"
+                        >
                           <Printer className="h-4 w-4" />
                           Print
                           <ChevronDown className="h-4 w-4 opacity-70" />
@@ -850,7 +867,7 @@ export default function Payments() {
                   <div className="mt-4 rounded-md border overflow-x-auto bg-background">
                     <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b bg-muted/20">
                       <div className="text-sm font-medium">Transaction history</div>
-                      <div className="text-xs text-muted-foreground">Balance: {rupees(p.balance)}</div>
+                      <div className="text-xs text-muted-foreground">Balance: {money(p.balance)}</div>
                     </div>
                     <Table>
                       <TableHeader>
@@ -875,7 +892,7 @@ export default function Payments() {
                               <TableCell>{r.kind}</TableCell>
                               <TableCell className="truncate max-w-[520px]">{r.ref || "—"}</TableCell>
                               <TableCell className={`text-right font-medium ${r.amount >= 0 ? "text-foreground" : "text-emerald-700"}`}>
-                                {rupees(r.amount)}
+                                {money(r.amount)}
                               </TableCell>
                             </TableRow>
                           ))

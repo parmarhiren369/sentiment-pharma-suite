@@ -600,37 +600,38 @@ export default function Payments() {
         </div>
 
         <Card className="p-4 mb-4">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
+          <div className="flex items-center justify-center gap-4">
+            <Button
+              size="lg"
+              variant={activePartyType === "customer" ? "default" : "outline"}
+              className="h-12 px-10 text-base"
+              onClick={() => {
+                setActivePartyType("customer");
+                setOpenPartyId(null);
+              }}
+            >
+              Customers
+            </Button>
+            <Button
+              size="lg"
+              variant={activePartyType === "supplier" ? "default" : "outline"}
+              className="h-12 px-10 text-base"
+              onClick={() => {
+                setActivePartyType("supplier");
+                setOpenPartyId(null);
+              }}
+            >
+              Suppliers
+            </Button>
+          </div>
+
+          <div className="mt-4 flex flex-col md:flex-row md:items-center gap-2 justify-between">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <div className="flex gap-2">
-                <Button
-                  size="lg"
-                  variant={activePartyType === "customer" ? "default" : "outline"}
-                  className="flex-1 sm:flex-none"
-                  onClick={() => {
-                    setActivePartyType("customer");
-                    setOpenPartyId(null);
-                  }}
-                >
-                  Customers
-                </Button>
-                <Button
-                  size="lg"
-                  variant={activePartyType === "supplier" ? "default" : "outline"}
-                  className="flex-1 sm:flex-none"
-                  onClick={() => {
-                    setActivePartyType("supplier");
-                    setOpenPartyId(null);
-                  }}
-                >
-                  Suppliers
-                </Button>
-              </div>
               <Input
                 placeholder={activePartyType === "customer" ? "Search customers..." : "Search suppliers..."}
                 value={partySearch}
                 onChange={(e) => setPartySearch(e.target.value)}
-                className="w-full sm:w-80"
+                className="w-full sm:w-96"
               />
               <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
                 <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />

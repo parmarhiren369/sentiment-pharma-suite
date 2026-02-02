@@ -1182,7 +1182,12 @@ export default function Payments() {
 
               <div className="space-y-2">
                 <Label htmlFor="date">Payment Date *</Label>
-                <Input id="date" type="date" value={formData.date} onChange={(e) => setFormData((s) => ({ ...s, date: e.target.value }))} />
+                <Input
+                  id="date"
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData((s) => ({ ...s, date: e.target.value }))}
+                />
               </div>
 
               <div className="space-y-2">
@@ -1222,89 +1227,41 @@ export default function Payments() {
                 />
               </div>
 
-              {(formData.method === "Bank" || formData.method === "Bank Transfer") ? (
-                <>
-                  <div className="space-y-2">
-                    <Label>Select Bank Account *</Label>
-                    <Select value={formData.bankAccountId} onValueChange={(v) => setFormData((s) => ({ ...s, bankAccountId: v }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select bank account" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {bankAccounts.map((b) => (
-                          <SelectItem key={b.id} value={b.id}>
-                            {b.accountName}{b.accountNumber ? ` (•••• ${b.accountNumber.replace(/\s+/g, "").slice(-4)})` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="bankTransferCharge">Bank Transfer Charge</Label>
-                    <Input
-                      id="bankTransferCharge"
-                      type="number"
-                      inputMode="decimal"
-                      value={formData.bankTransferCharge}
-                      onChange={(e) => setFormData((s) => ({ ...s, bankTransferCharge: e.target.value }))}
-                      placeholder="0.00"
-                    />
-                    <div className="text-xs text-muted-foreground">
-                      Transfer charges are tracked but not included in balance calculations.
-                    </div>
-                  </div>
-                </>
-              ) : null}
-
               <div className="space-y-2">
-                <Label>Party Type</Label>
+                <Label>Bank Name</Label>
                 <Select
-                  value={formData.partyType}
-                  onValueChange={(v) =>
-                    setFormData((s) => ({
-                      ...s,
-                      partyType: v as PaymentRecord["partyType"],
-                      partyId: "",
-                      partyName: "",
-                      invoiceId: "__general__",
-                      direction: v === "supplier" ? "Out" : "In",
-                    }))
-                  }
+                  value={formData.bankAccountId}
+                  onValueChange={(v) => setFormData((s) => ({ ...s, bankAccountId: v }))}
+                  disabled={!(formData.method === "Bank" || formData.method === "Bank Transfer")}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select party type" />
+                    <SelectValue placeholder="Select bank" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="customer">Customer</SelectItem>
-                    <SelectItem value="supplier">Supplier</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    {bankAccounts.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.accountName}{b.accountNumber ? ` (•••• ${b.accountNumber.replace(/\s+/g, "").slice(-4)})` : ""}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {formData.partyType === "other" ? (
-                <div className="space-y-2">
-                  <Label htmlFor="partyName">Party Name</Label>
-                  <Input id="partyName" value={formData.partyName} onChange={(e) => setFormData((s) => ({ ...s, partyName: e.target.value }))} />
+              <div className="space-y-2">
+                <Label htmlFor="bankTransferCharge">Bank Transfer Charge</Label>
+                <Input
+                  id="bankTransferCharge"
+                  type="number"
+                  inputMode="decimal"
+                  value={formData.bankTransferCharge}
+                  onChange={(e) => setFormData((s) => ({ ...s, bankTransferCharge: e.target.value }))}
+                  placeholder="0.00"
+                  disabled={!(formData.method === "Bank" || formData.method === "Bank Transfer")}
+                />
+                <div className="text-xs text-muted-foreground">
+                  Transfer charges are tracked but not included in balance calculations.
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label>Party</Label>
-                  <Select value={formData.partyId} onValueChange={(v) => setFormData((s) => ({ ...s, partyId: v }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={formData.partyType === "customer" ? "Select customer" : "Select supplier"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {partyOptions.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              </div>
             </div>
 
             <div className="space-y-2">

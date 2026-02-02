@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { AppHeader } from "@/components/layout/AppHeader";
-import { StatCard } from "@/components/cards/StatCard";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -8,6 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
@@ -22,7 +26,21 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { ArrowUpRight, Clock, HandCoins, Plus, Printer, RefreshCw, Users, Wallet } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  DollarSign,
+  Filter,
+  HandCoins,
+  Plus,
+  Printer,
+  RefreshCw,
+  Search,
+  TrendingDown,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 
 type PaymentDirection = "In" | "Out";
 type PaymentMethod = "Cash" | "UPI" | "Bank" | "Card" | "Cheque";
@@ -107,6 +125,11 @@ export default function Payments() {
   const [activePartyType, setActivePartyType] = useState<PartyType>("customer");
   const [partySearch, setPartySearch] = useState("");
   const [openPartyId, setOpenPartyId] = useState<string | null>(null);
+
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterOverdueOnly, setFilterOverdueOnly] = useState(false);
+  const [filterOutstandingOnly, setFilterOutstandingOnly] = useState(false);
+  const [filterAdvanceOnly, setFilterAdvanceOnly] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -200,10 +223,16 @@ export default function Payments() {
   }, [partySummaries]);
 
   const visiblePartySummaries = useMemo(() => {
-    if (!partySearch.trim()) return partySummaries;
+    let list = partySummaries;
+
+    if (filterOverdueOnly) list = list.filter((p) => p.overdueOutstanding > 0);
+    if (filterOutstandingOnly) list = list.filter((p) => p.outstanding > 0);
+    if (filterAdvanceOnly) list = list.filter((p) => p.advance > 0);
+
+    if (!partySearch.trim()) return list;
     const q = partySearch.toLowerCase();
-    return partySummaries.filter((p) => p.name.toLowerCase().includes(q));
-  }, [partySearch, partySummaries]);
+    return list.filter((p) => p.name.toLowerCase().includes(q));
+  }, [filterAdvanceOnly, filterOutstandingOnly, filterOverdueOnly, partySearch, partySummaries]);
 
   const fetchParties = async () => {
     const [customersSnap, suppliersSnap] = await Promise.all([
@@ -557,55 +586,134 @@ export default function Payments() {
 
   return (
     <>
-      <AppHeader title="Payments" subtitle="Track payments received and paid" />
+      <div className="flex-1 overflow-auto p-6 space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+              <DollarSign className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold tracking-tight">Payment Tracking</div>
+              <div className="text-sm text-muted-foreground">
+                Track payments and outstanding balances for customers and suppliers
+              </div>
+            </div>
+          </div>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatCard
-            title="Total outstanding"
-            value={rupees(topStats.totalOutstanding)}
-            change={activePartyType === "customer" ? "To receive" : "To pay"}
-            changeType="neutral"
-            icon={Wallet}
-            iconBgColor="bg-warning/20"
-            iconColor="text-warning"
-          />
-          <StatCard
-            title="Overdue amount"
-            value={rupees(topStats.overdueAmount)}
-            change={"Past due"}
-            changeType="negative"
-            icon={Clock}
-            iconBgColor="bg-destructive/20"
-            iconColor="text-destructive"
-          />
-          <StatCard
-            title="Advance payments"
-            value={rupees(topStats.advancePayments)}
-            change={"Extra paid"}
-            changeType="positive"
-            icon={HandCoins}
-            iconBgColor="bg-success/20"
-            iconColor="text-success"
-          />
-          <StatCard
-            title="Active parties"
-            value={topStats.activeCount.toString()}
-            change={activePartyType === "customer" ? "Customers" : "Suppliers"}
-            changeType="neutral"
-            icon={Users}
-            iconBgColor="bg-primary/20"
-            iconColor="text-primary"
-          />
+          <div className="flex items-center gap-2 justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              onClick={() => setFiltersOpen((v) => !v)}
+            >
+              <Filter className="h-4 w-4" />
+              Filter
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
+              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
-        <Card className="p-4 mb-4">
-          <div className="flex items-center justify-center">
-            <div className="flex w-full max-w-3xl gap-4">
+        {filtersOpen ? (
+          <Card className="p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant={filterOverdueOnly ? "default" : "outline"}
+                className={filterOverdueOnly ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+                onClick={() => setFilterOverdueOnly((v) => !v)}
+              >
+                Overdue only
+              </Button>
+              <Button
+                type="button"
+                variant={filterOutstandingOnly ? "default" : "outline"}
+                className={filterOutstandingOnly ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+                onClick={() => setFilterOutstandingOnly((v) => !v)}
+              >
+                Outstanding only
+              </Button>
+              <Button
+                type="button"
+                variant={filterAdvanceOnly ? "default" : "outline"}
+                className={filterAdvanceOnly ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+                onClick={() => setFilterAdvanceOnly((v) => !v)}
+              >
+                Advance only
+              </Button>
+              {(filterOverdueOnly || filterOutstandingOnly || filterAdvanceOnly) ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setFilterOverdueOnly(false);
+                    setFilterOutstandingOnly(false);
+                    setFilterAdvanceOnly(false);
+                  }}
+                >
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+          </Card>
+        ) : null}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm text-muted-foreground">Total Outstanding</div>
+                <div className="mt-2 text-2xl font-extrabold tabular-nums">{rupees(topStats.totalOutstanding)}</div>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                <TrendingUp className="h-5 w-5" />
+              </div>
+            </div>
+          </Card>
+          <Card className="p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm text-muted-foreground">Overdue Amount</div>
+                <div className="mt-2 text-2xl font-extrabold tabular-nums text-destructive">{rupees(topStats.overdueAmount)}</div>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-red-100 text-red-700 flex items-center justify-center">
+                <TrendingDown className="h-5 w-5" />
+              </div>
+            </div>
+          </Card>
+          <Card className="p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm text-muted-foreground">Advance Payments</div>
+                <div className="mt-2 text-2xl font-extrabold tabular-nums text-emerald-700">{rupees(topStats.advancePayments)}</div>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <HandCoins className="h-5 w-5" />
+              </div>
+            </div>
+          </Card>
+          <Card className="p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm text-muted-foreground">Active Parties</div>
+                <div className="mt-2 text-2xl font-extrabold tabular-nums text-purple-700">{topStats.activeCount}</div>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
+                <Users className="h-5 w-5" />
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <Card className="p-4">
+          <div className="rounded-xl border bg-muted/20 p-1 grid grid-cols-2 gap-1">
             <Button
-              size="lg"
-              variant={activePartyType === "customer" ? "default" : "outline"}
-              className="h-12 flex-1 text-base"
+              type="button"
+              className={activePartyType === "customer" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-transparent hover:bg-background"}
+              variant={activePartyType === "customer" ? "default" : "ghost"}
               onClick={() => {
                 setActivePartyType("customer");
                 setOpenPartyId(null);
@@ -614,9 +722,9 @@ export default function Payments() {
               Customers
             </Button>
             <Button
-              size="lg"
-              variant={activePartyType === "supplier" ? "default" : "outline"}
-              className="h-12 flex-1 text-base"
+              type="button"
+              className={activePartyType === "supplier" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-transparent hover:bg-background"}
+              variant={activePartyType === "supplier" ? "default" : "ghost"}
               onClick={() => {
                 setActivePartyType("supplier");
                 setOpenPartyId(null);
@@ -624,19 +732,22 @@ export default function Payments() {
             >
               Suppliers
             </Button>
-            </div>
           </div>
 
-          <div className="mt-4 flex items-center justify-end">
-            <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
-              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
+          <div className="mt-4 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={partySearch}
+              onChange={(e) => setPartySearch(e.target.value)}
+              placeholder={activePartyType === "customer" ? "Search customers..." : "Search suppliers..."}
+              className="pl-10"
+            />
           </div>
         </Card>
 
-        <div className="space-y-3">
-          {visiblePartySummaries.map((p) => {
+        <Card className="p-0 overflow-hidden">
+          <div className="divide-y">
+            {visiblePartySummaries.map((p) => {
             const isOpen = openPartyId === p.id;
             const settledLabel = activePartyType === "customer" ? "Received" : "Paid";
             const dueLabel = activePartyType === "customer" ? "To Receive" : "To Pay";
@@ -651,66 +762,93 @@ export default function Payments() {
                     ? "border-l-green-500"
                     : "border-l-transparent";
 
-            const MetricButton = ({
-              label,
-              value,
-              valueClassName,
-            }: {
-              label: string;
-              value: string;
-              valueClassName?: string;
-            }) => (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-auto rounded-full px-3 py-2 justify-start bg-background/60 hover:bg-accent/60"
-                onClick={() => toggleParty(p.id)}
-              >
-                <span className="text-xs text-muted-foreground mr-2">{label}</span>
-                <span className={`text-sm font-semibold tabular-nums ${valueClassName || ""}`}>{value}</span>
-              </Button>
-            );
+            const isActive =
+              p.totalInvoiced > 0 || p.settled > 0 || p.creditAdjustments > 0 || p.debitAdjustments > 0;
 
             return (
-              <Card key={p.id} className={`p-4 border-l-4 ${accentClass} hover:shadow-sm transition-shadow`}>
-                <div className="flex flex-col lg:flex-row lg:items-start gap-3 justify-between">
-                  <div className="min-w-0">
-                    <div className="flex items-start gap-2">
-                      <div className="font-extrabold tracking-wide uppercase text-base sm:text-lg leading-tight truncate">{p.name}</div>
-                      {p.overdueOutstanding > 0 ? (
-                        <span className="shrink-0 rounded-full bg-destructive/10 text-destructive text-[11px] px-2 py-0.5 font-semibold">
-                          OVERDUE
-                        </span>
-                      ) : p.advance > 0 ? (
-                        <span className="shrink-0 rounded-full bg-success/10 text-success text-[11px] px-2 py-0.5 font-semibold">
-                          ADVANCE
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      <MetricButton label="Total invoiced:" value={rupees(p.totalInvoiced)} />
-                      <MetricButton label={`${settledLabel}:`} value={rupees(p.settled)} valueClassName={activePartyType === "customer" ? "text-success" : ""} />
-                      <MetricButton label="Return/ Adjustments:" value={rupees(p.creditAdjustments)} />
-                      <MetricButton label={`${dueLabel}:`} value={rupees(p.outstanding)} valueClassName={activePartyType === "customer" ? "text-destructive" : ""} />
+              <div key={p.id} className={`px-4 py-4 border-l-4 ${accentClass}`}>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => toggleParty(p.id)}
+                      className="mt-1 h-8 w-8 rounded-lg border bg-background hover:bg-muted/30 flex items-center justify-center shrink-0"
+                      aria-label={isOpen ? "Collapse" : "Expand"}
+                    >
+                      <ChevronRight className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                    </button>
+
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="font-extrabold tracking-wide uppercase truncate">{p.name}</div>
+                        {isActive ? (
+                          <span className="rounded-full bg-blue-100 text-blue-700 text-[11px] px-2 py-0.5 font-semibold">
+                            ACTIVE
+                          </span>
+                        ) : null}
+                        {p.overdueOutstanding > 0 ? (
+                          <span className="rounded-full bg-destructive/10 text-destructive text-[11px] px-2 py-0.5 font-semibold">
+                            OVERDUE
+                          </span>
+                        ) : p.advance > 0 ? (
+                          <span className="rounded-full bg-emerald-100 text-emerald-700 text-[11px] px-2 py-0.5 font-semibold">
+                            ADVANCE
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap gap-x-8 gap-y-2 text-sm">
+                        <div className="text-muted-foreground">
+                          Total Invoiced: <span className="text-foreground font-medium">{rupees(p.totalInvoiced)}</span>
+                        </div>
+                        <div className="text-muted-foreground">
+                          {settledLabel}: <span className="font-medium text-emerald-700">{rupees(p.settled)}</span>
+                        </div>
+                        <div className="text-muted-foreground">
+                          Returns/Adjustments: <span className="font-medium text-purple-700">{rupees(p.creditAdjustments)}</span>
+                        </div>
+                        <div className="text-muted-foreground">
+                          {dueLabel}: <span className="font-semibold text-destructive">{rupees(p.outstanding)}</span>
+                        </div>
+                        {p.advance > 0 ? (
+                          <div className="text-muted-foreground">
+                            Advance Balance: <span className="font-medium text-blue-700">{rupees(p.advance)}</span>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 justify-end">
-                    <Button variant="outline" className="gap-2" onClick={() => printPartyStatement(p)}>
-                      <Printer className="w-4 h-4" />
-                      Print
-                    </Button>
-                    <Button className="gap-2" onClick={() => openAddForParty(activePartyType, p.id, p.name)}>
-                      <Plus className="w-4 h-4" />
-                      Add payment
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" variant="secondary" className="gap-2">
+                          <Printer className="h-4 w-4" />
+                          Print
+                          <ChevronDown className="h-4 w-4 opacity-70" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => printPartyStatement(p)}>
+                          Print statement
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <Button
+                      type="button"
+                      className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                      onClick={() => openAddForParty(activePartyType, p.id, p.name)}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Payment
                     </Button>
                   </div>
                 </div>
 
                 {isOpen ? (
-                  <div className="mt-4 rounded-md border overflow-x-auto">
-                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b bg-muted/30">
+                  <div className="mt-4 rounded-md border overflow-x-auto bg-background">
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b bg-muted/20">
                       <div className="text-sm font-medium">Transaction history</div>
                       <div className="text-xs text-muted-foreground">Balance: {rupees(p.balance)}</div>
                     </div>
@@ -736,7 +874,7 @@ export default function Payments() {
                               <TableCell>{r.date || "—"}</TableCell>
                               <TableCell>{r.kind}</TableCell>
                               <TableCell className="truncate max-w-[520px]">{r.ref || "—"}</TableCell>
-                              <TableCell className={`text-right font-medium ${r.amount >= 0 ? "text-foreground" : "text-success"}`}>
+                              <TableCell className={`text-right font-medium ${r.amount >= 0 ? "text-foreground" : "text-emerald-700"}`}>
                                 {rupees(r.amount)}
                               </TableCell>
                             </TableRow>
@@ -746,14 +884,15 @@ export default function Payments() {
                     </Table>
                   </div>
                 ) : null}
-              </Card>
+              </div>
             );
-          })}
+            })}
 
-          {visiblePartySummaries.length === 0 ? (
-            <Card className="p-6 text-sm text-muted-foreground">No parties found.</Card>
-          ) : null}
-        </div>
+            {visiblePartySummaries.length === 0 ? (
+              <div className="p-6 text-sm text-muted-foreground">No parties found.</div>
+            ) : null}
+          </div>
+        </Card>
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

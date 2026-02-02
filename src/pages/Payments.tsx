@@ -1145,7 +1145,7 @@ export default function Payments() {
                 </SelectTrigger>
                 <SelectContent>
                   {invoices.map((inv) => {
-                    const labelNo = inv.manualInvoiceNo || inv.invoiceNo;
+                    const labelNo = inv.invoiceNo;
                     return (
                       <SelectItem key={inv.id} value={inv.id}>
                         {labelNo} — {money(inv.total || 0)}

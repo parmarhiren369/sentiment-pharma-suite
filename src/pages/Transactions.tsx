@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
-import { DataTable } from "@/components/tables/DataTable";
-import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
@@ -23,44 +22,67 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { ArrowDownRight, ArrowUpRight, IndianRupee, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { 
+  BookOpen, 
+  Calendar,
+  DollarSign,
+  Pencil, 
+  Plus, 
+  RefreshCw, 
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  Wallet
+} from "lucide-react";
 
-type TransactionType = "Income" | "Expense";
+type TransactionType = "Deposit" | "Withdrawal";
 type TransactionStatus = "Completed" | "Pending" | "Failed";
+type PaymentMethod = "Cash" | "Bank" | "UPI" | "Card" | "Cheque" | "MPESA";
+
+interface BankAccount {
+  id: string;
+  accountName: string;
+  accountNumber?: string;
+  balance: number;
+}
+
+interface CashAccount {
+  id: string;
+  accountName: string;
+  balance: number;
+}
 
 interface TransactionRecord {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   description: string;
-  category: string;
-  amount: number;
   type: TransactionType;
-  status: TransactionStatus;
-  reference: string;
-  partyType: "customer" | "supplier" | "other";
-  partyId?: string;
-  partyName?: string;
+  amount: number;
+  category: string;
+  paymentMethod: PaymentMethod;
+  transferCharge: number;
+  accountType: "bank" | "cash";
+  accountId: string;
+  accountName?: string;
+  reference?: string;
   notes?: string;
+  status: TransactionStatus;
   createdAt?: Date;
-}
-
-interface PartyOption {
-  id: string;
-  name: string;
 }
 
 const defaultFormState = {
   date: new Date().toISOString().slice(0, 10),
   description: "",
-  category: "General",
+  type: "Deposit" as TransactionType,
   amount: "",
-  type: "Income" as TransactionType,
-  status: "Completed" as TransactionStatus,
+  category: "General",
+  paymentMethod: "Cash" as PaymentMethod,
+  transferCharge: "",
+  accountType: "cash" as "bank" | "cash",
+  accountId: "",
   reference: "",
-  partyType: "customer" as TransactionRecord["partyType"],
-  partyId: "",
-  partyName: "",
   notes: "",
+  status: "Completed" as TransactionStatus,
 };
 
 function safeNumber(value: string): number {
@@ -70,8 +92,8 @@ function safeNumber(value: string): number {
 
 export default function Transactions() {
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
-  const [customers, setCustomers] = useState<PartyOption[]>([]);
-  const [suppliers, setSuppliers] = useState<PartyOption[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [cashAccounts, setCashAccounts] = useState<CashAccount[]>([]);
 
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -83,79 +105,84 @@ export default function Transactions() {
 
   const { toast } = useToast();
 
-  const partyOptions = useMemo(() => {
-    if (formData.partyType === "supplier") return suppliers;
-    if (formData.partyType === "customer") return customers;
-    return [];
-  }, [customers, suppliers, formData.partyType]);
-
-  const selectedParty = useMemo(() => {
-    if (formData.partyType === "other") return { id: "", name: formData.partyName.trim() };
-    return partyOptions.find((p) => p.id === formData.partyId);
-  }, [formData.partyId, formData.partyName, formData.partyType, partyOptions]);
-
   const filtered = useMemo(() => {
     if (!search.trim()) return transactions;
     const q = search.toLowerCase();
     return transactions.filter((t) =>
-      `${t.description} ${t.category} ${t.reference} ${t.partyName ?? ""}`.toLowerCase().includes(q)
+      `${t.description} ${t.category} ${t.reference ?? ""} ${t.accountName ?? ""}`.toLowerCase().includes(q)
     );
   }, [transactions, search]);
 
   const stats = useMemo(() => {
-    const income = transactions
-      .filter((t) => t.type === "Income")
+    const deposits = transactions
+      .filter((t) => t.type === "Deposit" && t.status === "Completed")
       .reduce((sum, t) => sum + (t.amount || 0), 0);
-    const expense = transactions
-      .filter((t) => t.type === "Expense")
+    
+    const withdrawals = transactions
+      .filter((t) => t.type === "Withdrawal" && t.status === "Completed")
       .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    const totalBankBalance = bankAccounts.reduce((sum, b) => sum + (b.balance || 0), 0);
+    const totalCashBalance = cashAccounts.reduce((sum, c) => sum + (c.balance || 0), 0);
 
     return {
       total: transactions.length,
-      income,
-      expense,
-      net: income - expense,
+      deposits,
+      withdrawals,
+      netBalance: deposits - withdrawals,
+      totalBankBalance,
+      totalCashBalance,
+      bankAccountsCount: bankAccounts.length,
+      cashAccountsCount: cashAccounts.length,
     };
-  }, [transactions]);
+  }, [transactions, bankAccounts, cashAccounts]);
 
-  const exportRows = useMemo(
-    () =>
-      filtered.map((t) => ({
-        Date: t.date,
-        Type: t.type,
-        Amount: t.amount,
-        Category: t.category,
-        Description: t.description,
-        Party: t.partyName || "",
-        Status: t.status,
-        Reference: t.reference,
-        Notes: t.notes || "",
-      })),
-    [filtered]
-  );
+  const money = (n: number): string => {
+    const value = Number.isFinite(n) ? n : 0;
+    return `₹${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
-  const fetchParties = async () => {
-    const [customersSnap, suppliersSnap] = await Promise.all([
-      getDocs(collection(db, "customers")),
-      getDocs(collection(db, "suppliers")),
-    ]);
+  const fetchBankAccounts = async () => {
+    const qy = query(collection(db, "bankAccounts"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(qy);
+    const list = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        accountName: (data.accountName || data.name || "").toString(),
+        accountNumber: (data.accountNumber || "").toString() || undefined,
+        balance: typeof data.balance === "number" ? data.balance : 0,
+      } as BankAccount;
+    });
+    setBankAccounts(list.filter((b) => b.accountName));
+  };
 
-    const customersList = customersSnap.docs
-      .map((d) => ({ id: d.id, name: (d.data().name || "").toString() }))
-      .filter((x) => x.name)
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    const suppliersList = suppliersSnap.docs
-      .map((d) => ({ id: d.id, name: (d.data().name || "").toString() }))
-      .filter((x) => x.name)
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    setCustomers(customersList);
-    setSuppliers(suppliersList);
+  const fetchCashAccounts = async () => {
+    const qy = query(collection(db, "cashAccounts"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(qy);
+    const list = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        accountName: (data.accountName || data.name || "Cash").toString(),
+        balance: typeof data.balance === "number" ? data.balance : 0,
+      } as CashAccount;
+    });
+    
+    // If no cash accounts exist, create a default one
+    if (list.length === 0) {
+      list.push({
+        id: "default-cash",
+        accountName: "Cash",
+        balance: 0,
+      });
+    }
+    
+    setCashAccounts(list);
   };
 
   const fetchTransactions = async () => {
-    const qy = query(collection(db, "transactions"), orderBy("createdAt", "desc"));
+    const qy = query(collection(db, "accountingTransactions"), orderBy("createdAt", "desc"));
     const snap = await getDocs(qy);
     const list = snap.docs.map((d) => {
       const data = d.data();
@@ -163,15 +190,17 @@ export default function Transactions() {
         id: d.id,
         date: (data.date || "").toString(),
         description: (data.description || "").toString(),
-        category: (data.category || "General").toString(),
+        type: (data.type || "Deposit") as TransactionType,
         amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
-        type: (data.type || "Income") as TransactionType,
-        status: (data.status || "Completed") as TransactionStatus,
-        reference: (data.reference || "").toString(),
-        partyType: (data.partyType || "customer") as TransactionRecord["partyType"],
-        partyId: (data.partyId || "").toString() || undefined,
-        partyName: (data.partyName || "").toString() || undefined,
+        category: (data.category || "General").toString(),
+        paymentMethod: (data.paymentMethod || "Cash") as PaymentMethod,
+        transferCharge: typeof data.transferCharge === "number" ? data.transferCharge : parseFloat(data.transferCharge) || 0,
+        accountType: (data.accountType || "cash") as "bank" | "cash",
+        accountId: (data.accountId || "").toString(),
+        accountName: (data.accountName || "").toString() || undefined,
+        reference: (data.reference || "").toString() || undefined,
         notes: (data.notes || "").toString() || undefined,
+        status: (data.status || "Completed") as TransactionStatus,
         createdAt: data.createdAt?.toDate?.() || new Date(),
       } as TransactionRecord;
     });
@@ -190,7 +219,7 @@ export default function Transactions() {
 
     setIsLoading(true);
     try {
-      await Promise.all([fetchParties(), fetchTransactions()]);
+      await Promise.all([fetchBankAccounts(), fetchCashAccounts(), fetchTransactions()]);
     } catch (error) {
       console.error("Error fetching transactions", error);
       toast({
@@ -225,15 +254,16 @@ export default function Transactions() {
     setFormData({
       date: row.date,
       description: row.description,
-      category: row.category,
-      amount: (row.amount ?? 0).toString(),
       type: row.type,
-      status: row.status,
-      reference: row.reference,
-      partyType: row.partyType,
-      partyId: row.partyId || "",
-      partyName: row.partyName || "",
+      amount: (row.amount ?? 0).toString(),
+      category: row.category,
+      paymentMethod: row.paymentMethod,
+      transferCharge: (row.transferCharge ?? 0).toString(),
+      accountType: row.accountType,
+      accountId: row.accountId,
+      reference: row.reference || "",
       notes: row.notes || "",
+      status: row.status,
     });
     setIsDialogOpen(true);
   };
@@ -243,7 +273,7 @@ export default function Transactions() {
     if (!confirm("Delete this transaction?")) return;
 
     try {
-      await deleteDoc(doc(db, "transactions", id));
+      await deleteDoc(doc(db, "accountingTransactions", id));
       toast({ title: "Deleted", description: "Transaction removed." });
       fetchTransactions();
     } catch (error) {
@@ -284,38 +314,40 @@ export default function Transactions() {
       return;
     }
 
-    if (formData.partyType !== "other" && !formData.partyId) {
-      toast({ title: "Validation error", description: "Select a party.", variant: "destructive" });
+    if (!formData.accountId) {
+      toast({ title: "Validation error", description: "Select an account.", variant: "destructive" });
       return;
     }
 
-    if (formData.partyType === "other" && !formData.partyName.trim()) {
-      toast({ title: "Validation error", description: "Party name is required.", variant: "destructive" });
-      return;
-    }
+    const transferCharge = safeNumber(formData.transferCharge);
+    const selectedAccount = formData.accountType === "bank" 
+      ? bankAccounts.find((b) => b.id === formData.accountId)
+      : cashAccounts.find((c) => c.id === formData.accountId);
 
     const payload = {
       date: formData.date,
       description: formData.description.trim(),
-      category: formData.category.trim() || "General",
-      amount,
       type: formData.type,
-      status: formData.status,
+      amount,
+      category: formData.category.trim() || "General",
+      paymentMethod: formData.paymentMethod,
+      transferCharge,
+      accountType: formData.accountType,
+      accountId: formData.accountId,
+      accountName: selectedAccount?.accountName || "",
       reference: formData.reference.trim(),
-      partyType: formData.partyType,
-      partyId: formData.partyType === "other" ? "" : formData.partyId,
-      partyName: selectedParty?.name || "",
       notes: formData.notes.trim(),
+      status: formData.status,
       updatedAt: Timestamp.now(),
     };
 
     setIsSubmitting(true);
     try {
       if (editing) {
-        await updateDoc(doc(db, "transactions", editing.id), payload);
-        toast({ title: "Updated", description: "Transaction updated." });
+        await updateDoc(doc(db, "accountingTransactions", editing.id), payload);
+        toast({ title: "Updated", description: "Transaction updated successfully." });
       } else {
-        await addDoc(collection(db, "transactions"), {
+        await addDoc(collection(db, "accountingTransactions"), {
           ...payload,
           createdAt: Timestamp.now(),
         });
@@ -337,134 +369,193 @@ export default function Transactions() {
     }
   };
 
-  const columns = useMemo(
-    () => [
-      { key: "date", header: "Date" },
-      {
-        key: "type",
-        header: "Type",
-        render: (t: TransactionRecord) => (
-          <span className={t.type === "Income" ? "text-success font-medium" : "text-destructive font-medium"}>
-            {t.type}
-          </span>
-        ),
-      },
-      { key: "description", header: "Description" },
-      { key: "category", header: "Category" },
-      {
-        key: "amount",
-        header: "Amount",
-        render: (t: TransactionRecord) => (
-          <span className="font-medium">₹{(t.amount || 0).toLocaleString("en-IN")}</span>
-        ),
-      },
-      { key: "partyName", header: "Party" },
-      { key: "status", header: "Status" },
-      { key: "reference", header: "Reference" },
-      {
-        key: "actions",
-        header: "Actions",
-        render: (t: TransactionRecord) => (
-          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-            <Button variant="outline" size="sm" className="gap-1" onClick={() => openEdit(t)}>
-              <Pencil className="w-4 h-4" />
-              Edit
-            </Button>
-            <Button variant="destructive" size="sm" className="gap-1" onClick={() => handleDelete(t.id)}>
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </Button>
-          </div>
-        ),
-      },
-    ],
-    []
-  );
-
   return (
     <>
-      <AppHeader title="Transactions" subtitle="Create and manage income/expense transactions" />
+      <AppHeader title="Transaction Management" subtitle="Manage bank and cash accounts" />
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="flex-1 overflow-auto p-6 space-y-6">
+        {/* Bank and Cash Book Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Bank Book Card */}
+          <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-12 w-12 rounded-lg bg-white/20 flex items-center justify-center">
+                <BookOpen className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold">Bank Book</h3>
+                <p className="text-sm text-blue-100">Manage bank accounts</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mt-6">
+              <div className="bg-white/10 rounded-lg p-3">
+                <div className="text-sm text-blue-100">Total Accounts</div>
+                <div className="text-2xl font-bold mt-1">{stats.bankAccountsCount}</div>
+              </div>
+              <div className="bg-white/10 rounded-lg p-3">
+                <div className="text-sm text-blue-100">Total Balance</div>
+                <div className="text-2xl font-bold mt-1">{money(stats.totalBankBalance)}</div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Cash Book Card */}
+          <Card className="p-6 bg-gradient-to-br from-green-500 to-green-600 text-white">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-12 w-12 rounded-lg bg-white/20 flex items-center justify-center">
+                <Wallet className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold">Cash Book</h3>
+                <p className="text-sm text-green-100">Manage cash accounts</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mt-6">
+              <div className="bg-white/10 rounded-lg p-3">
+                <div className="text-sm text-green-100">Total Accounts</div>
+                <div className="text-2xl font-bold mt-1">{stats.cashAccountsCount}</div>
+              </div>
+              <div className="bg-white/10 rounded-lg p-3">
+                <div className="text-sm text-green-100">Total Balance</div>
+                <div className="text-2xl font-bold mt-1">{money(stats.totalCashBalance)}</div>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            title="Total"
-            value={stats.total.toString()}
-            change={"All entries"}
-            changeType="neutral"
-            icon={IndianRupee}
-            iconBgColor="bg-primary/20"
-            iconColor="text-primary"
-          />
-          <StatCard
-            title="Income"
-            value={`₹${stats.income.toLocaleString("en-IN")}`}
-            change={""}
+            title="Total Deposits"
+            value={money(stats.deposits)}
+            change="Credit"
             changeType="positive"
-            icon={ArrowUpRight}
+            icon={TrendingUp}
             iconBgColor="bg-success/20"
             iconColor="text-success"
           />
           <StatCard
-            title="Expense"
-            value={`₹${stats.expense.toLocaleString("en-IN")}`}
-            change={""}
+            title="Total Withdrawals"
+            value={money(stats.withdrawals)}
+            change="Debit"
             changeType="negative"
-            icon={ArrowDownRight}
+            icon={TrendingDown}
             iconBgColor="bg-destructive/20"
             iconColor="text-destructive"
           />
           <StatCard
-            title="Net"
-            value={`₹${stats.net.toLocaleString("en-IN")}`}
-            change={stats.net >= 0 ? "Profit" : "Loss"}
-            changeType={stats.net >= 0 ? "positive" : "negative"}
-            icon={IndianRupee}
-            iconBgColor="bg-secondary"
-            iconColor="text-foreground"
+            title="Net Balance"
+            value={money(stats.netBalance)}
+            change={stats.netBalance >= 0 ? "Surplus" : "Deficit"}
+            changeType={stats.netBalance >= 0 ? "positive" : "negative"}
+            icon={DollarSign}
+            iconBgColor="bg-info/20"
+            iconColor="text-info"
+          />
+          <StatCard
+            title="Total Transactions"
+            value={stats.total.toString()}
+            change="All entries"
+            changeType="neutral"
+            icon={Calendar}
+            iconBgColor="bg-primary/20"
+            iconColor="text-primary"
           />
         </div>
 
-        <Card className="p-4 mb-4">
-          <div className="flex flex-col md:flex-row md:items-center gap-3 justify-between">
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="Search description, party, category..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full md:w-96"
-              />
+        {/* Transactions Table */}
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Recent Transactions</h3>
+            <div className="text-sm text-muted-foreground">{filtered.length} records</div>
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-3 mb-4">
+            <Input
+              placeholder="Search description, category, reference..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="flex-1"
+            />
+            <div className="flex gap-2">
               <Button variant="outline" className="gap-2" onClick={fetchAll} disabled={isLoading}>
                 <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
                 Refresh
               </Button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <ExportExcelButton
-                rows={exportRows}
-                fileName="transactions"
-                sheetName="Transactions"
-                label="Export"
-                variant="outline"
-              />
               <Button className="gap-2" onClick={openAdd}>
                 <Plus className="w-4 h-4" />
                 Add Transaction
               </Button>
             </div>
           </div>
-        </Card>
 
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
-          <div className="p-4">
-            <DataTable data={filtered} columns={columns} keyField="id" onRowClick={openEdit} />
+          <div className="rounded-md border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[50px]">#</TableHead>
+                  <TableHead className="w-[110px]">Date</TableHead>
+                  <TableHead className="min-w-[200px]">Description</TableHead>
+                  <TableHead className="w-[100px]">Type</TableHead>
+                  <TableHead className="w-[130px] text-right">Amount</TableHead>
+                  <TableHead className="w-[130px]">Category</TableHead>
+                  <TableHead className="w-[120px]">Payment Method</TableHead>
+                  <TableHead className="w-[120px] text-right">Transfer Charge</TableHead>
+                  <TableHead className="w-[120px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                      No transactions found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((t, idx) => (
+                    <TableRow key={t.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openEdit(t)}>
+                      <TableCell>{idx + 1}</TableCell>
+                      <TableCell>{t.date}</TableCell>
+                      <TableCell className="font-medium">{t.description}</TableCell>
+                      <TableCell>
+                        <span
+                          className={
+                            t.type === "Deposit"
+                              ? "rounded-full bg-success/20 text-success text-[11px] px-2 py-1 font-semibold"
+                              : "rounded-full bg-destructive/20 text-destructive text-[11px] px-2 py-1 font-semibold"
+                          }
+                        >
+                          {t.type === "Deposit" ? "CREDIT" : "DEBIT"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">{money(t.amount)}</TableCell>
+                      <TableCell>{t.category}</TableCell>
+                      <TableCell>{t.paymentMethod}</TableCell>
+                      <TableCell className="text-right">
+                        {t.transferCharge > 0 ? money(t.transferCharge) : "—"}
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(t)}>
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(t.id)}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </div>
-        </div>
+        </Card>
       </div>
 
+      {/* Add/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Transaction" : "Add Transaction"}</DialogTitle>
           </DialogHeader>
@@ -472,7 +563,7 @@ export default function Transactions() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
+                <Label htmlFor="date">Date *</Label>
                 <Input
                   id="date"
                   type="date"
@@ -482,27 +573,123 @@ export default function Transactions() {
               </div>
 
               <div className="space-y-2">
-                <Label>Type</Label>
+                <Label>Type *</Label>
                 <Select value={formData.type} onValueChange={(v) => setFormData((s) => ({ ...s, type: v as TransactionType }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Income">Income</SelectItem>
-                    <SelectItem value="Expense">Expense</SelectItem>
+                    <SelectItem value="Deposit">Deposit (Credit)</SelectItem>
+                    <SelectItem value="Withdrawal">Withdrawal (Debit)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="amount">Amount</Label>
+                <Label htmlFor="amount">Amount *</Label>
                 <Input
                   id="amount"
                   type="number"
                   inputMode="decimal"
                   value={formData.amount}
                   onChange={(e) => setFormData((s) => ({ ...s, amount: e.target.value }))}
-                  placeholder="0"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="category">Category</Label>
+                <Input
+                  id="category"
+                  value={formData.category}
+                  onChange={(e) => setFormData((s) => ({ ...s, category: e.target.value }))}
+                  placeholder="General"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Account Type *</Label>
+                <Select
+                  value={formData.accountType}
+                  onValueChange={(v) =>
+                    setFormData((s) => ({
+                      ...s,
+                      accountType: v as "bank" | "cash",
+                      accountId: "",
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select account type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bank">Bank Account</SelectItem>
+                    <SelectItem value="cash">Cash Account</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Account *</Label>
+                <Select value={formData.accountId} onValueChange={(v) => setFormData((s) => ({ ...s, accountId: v }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {formData.accountType === "bank"
+                      ? bankAccounts.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.accountName} {b.accountNumber ? `(${b.accountNumber})` : ""}
+                          </SelectItem>
+                        ))
+                      : cashAccounts.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.accountName}
+                          </SelectItem>
+                        ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Payment Method *</Label>
+                <Select
+                  value={formData.paymentMethod}
+                  onValueChange={(v) => setFormData((s) => ({ ...s, paymentMethod: v as PaymentMethod }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select payment method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Cash">Cash</SelectItem>
+                    <SelectItem value="Bank">Bank</SelectItem>
+                    <SelectItem value="UPI">UPI</SelectItem>
+                    <SelectItem value="Card">Card</SelectItem>
+                    <SelectItem value="Cheque">Cheque</SelectItem>
+                    <SelectItem value="MPESA">MPESA</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="transferCharge">Transfer Charge</Label>
+                <Input
+                  id="transferCharge"
+                  type="number"
+                  inputMode="decimal"
+                  value={formData.transferCharge}
+                  onChange={(e) => setFormData((s) => ({ ...s, transferCharge: e.target.value }))}
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reference">Reference</Label>
+                <Input
+                  id="reference"
+                  value={formData.reference}
+                  onChange={(e) => setFormData((s) => ({ ...s, reference: e.target.value }))}
+                  placeholder="Transaction reference"
                 />
               </div>
 
@@ -522,87 +709,15 @@ export default function Transactions() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
-                <Input
-                  id="category"
-                  value={formData.category}
-                  onChange={(e) => setFormData((s) => ({ ...s, category: e.target.value }))}
-                  placeholder="General"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="reference">Reference</Label>
-                <Input
-                  id="reference"
-                  value={formData.reference}
-                  onChange={(e) => setFormData((s) => ({ ...s, reference: e.target.value }))}
-                  placeholder="Invoice no / Payment ref"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Party Type</Label>
-                <Select
-                  value={formData.partyType}
-                  onValueChange={(v) =>
-                    setFormData((s) => ({
-                      ...s,
-                      partyType: v as TransactionRecord["partyType"],
-                      partyId: "",
-                      partyName: "",
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select party type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="customer">Customer</SelectItem>
-                    <SelectItem value="supplier">Supplier</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {formData.partyType === "other" ? (
-                <div className="space-y-2">
-                  <Label htmlFor="partyName">Party Name</Label>
-                  <Input
-                    id="partyName"
-                    value={formData.partyName}
-                    onChange={(e) => setFormData((s) => ({ ...s, partyName: e.target.value }))}
-                    placeholder="Enter name"
-                  />
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label>Party</Label>
-                  <Select value={formData.partyId} onValueChange={(v) => setFormData((s) => ({ ...s, partyId: v }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={formData.partyType === "customer" ? "Select customer" : "Select supplier"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {partyOptions.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">Description *</Label>
               <Input
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData((s) => ({ ...s, description: e.target.value }))}
-                placeholder="e.g., Sale receipt / Rent / Purchase"
+                placeholder="e.g., Advance Payment received from AL-GAWHAR"
               />
             </div>
 
@@ -613,6 +728,7 @@ export default function Transactions() {
                 value={formData.notes}
                 onChange={(e) => setFormData((s) => ({ ...s, notes: e.target.value }))}
                 placeholder="Optional notes"
+                rows={3}
               />
             </div>
 

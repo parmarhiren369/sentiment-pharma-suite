@@ -1160,9 +1160,9 @@ export default function Payments() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-[50px]"></TableHead>
                           <TableHead className="w-[120px]">Date</TableHead>
                           <TableHead className="w-[160px]">Type</TableHead>
+                          <TableHead className="w-[50px]"></TableHead>
                           <TableHead className="w-[180px]">Invoice Number</TableHead>
                           <TableHead className="w-[170px] text-right">Amount Paid Till Now</TableHead>
                           <TableHead className="w-[170px] text-right">Amount Remaining</TableHead>
@@ -1214,6 +1214,8 @@ export default function Payments() {
                             return (
                               <>
                                 <TableRow key={r.invoiceId}>
+                                  <TableCell>{r.date || "—"}</TableCell>
+                                  <TableCell>{r.type}</TableCell>
                                   <TableCell onClick={(e) => e.stopPropagation()}>
                                     <Button
                                       variant="ghost"
@@ -1239,8 +1241,6 @@ export default function Payments() {
                                       )}
                                     </Button>
                                   </TableCell>
-                                  <TableCell>{r.date || "—"}</TableCell>
-                                  <TableCell>{r.type}</TableCell>
                                   <TableCell className="font-medium">{r.invoiceNo || "—"}</TableCell>
                                   <TableCell className="text-right font-medium text-success">{money(r.amountPaid)}</TableCell>
                                   <TableCell className="text-right font-medium text-warning">{money(r.amountRemaining)}</TableCell>

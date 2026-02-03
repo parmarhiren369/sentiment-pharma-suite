@@ -153,6 +153,7 @@ export default function Payments() {
   const [activePartyType, setActivePartyType] = useState<PartyType>("customer");
   const [partySearch, setPartySearch] = useState("");
   const [openPartyId, setOpenPartyId] = useState<string | null>(null);
+  const [expandedInvoiceIds, setExpandedInvoiceIds] = useState<Set<string>>(new Set());
 
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterOverdueOnly, setFilterOverdueOnly] = useState(false);
@@ -1159,6 +1160,7 @@ export default function Payments() {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-[50px]"></TableHead>
                           <TableHead className="w-[120px]">Date</TableHead>
                           <TableHead className="w-[160px]">Type</TableHead>
                           <TableHead className="w-[180px]">Invoice Number</TableHead>
@@ -1172,57 +1174,200 @@ export default function Payments() {
                       <TableBody>
                         {invoiceRows.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={8} className="text-muted-foreground">
+                            <TableCell colSpan={9} className="text-muted-foreground">
                               No transactions found.
                             </TableCell>
                           </TableRow>
                         ) : (
-                          invoiceRows.map((r) => (
-                            <TableRow key={r.invoiceId}>
-                              <TableCell>{r.date || "—"}</TableCell>
-                              <TableCell>{r.type}</TableCell>
-                              <TableCell className="font-medium">{r.invoiceNo || "—"}</TableCell>
-                              <TableCell className="text-right font-medium text-success">{money(r.amountPaid)}</TableCell>
-                              <TableCell className="text-right font-medium text-warning">{money(r.amountRemaining)}</TableCell>
-                              <TableCell className="text-right font-medium">{money(r.totalAmount)}</TableCell>
-                              <TableCell>
-                                <span
-                                  className={
-                                    r.status === "Paid"
-                                      ? "rounded-full bg-success/20 text-success text-[11px] px-2 py-0.5 font-semibold"
-                                      : r.status === "Partially Paid"
-                                        ? "rounded-full bg-warning/20 text-warning text-[11px] px-2 py-0.5 font-semibold"
-                                        : "rounded-full bg-secondary text-secondary-foreground text-[11px] px-2 py-0.5 font-semibold"
-                                  }
-                                >
-                                  {r.status}
-                                </span>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const url = new URL(`/invoices/${r.invoiceId}/print`, window.location.origin).toString();
-                                      const w = window.open(url, "_blank", "noopener,noreferrer");
-                                      if (!w) {
-                                        toast({
-                                          title: "Popup blocked",
-                                          description: "Please allow popups to print the invoice.",
-                                          variant: "destructive",
+                          invoiceRows.map((r) => {
+                            const isInvoiceExpanded = expandedInvoiceIds.has(r.invoiceId);
+                            
+                            // Get payments for this invoice
+                            const norm = (v: unknown) => (v ?? "").toString().trim().toLowerCase();
+                            const inv = p.invoices.find(i => i.id === r.invoiceId);
+                            const systemInvoiceNo = inv?.invoiceNo || "";
+                            const manualInvoiceNo = inv?.manualInvoiceNo;
+                            
+                            const settledDirection: PaymentDirection = activePartyType === "customer" ? "In" : "Out";
+                            const invoicePayments = p.payments
+                              .filter((payment) => {
+                                if (payment.direction !== settledDirection) return false;
+                                if (payment.status !== "Completed") return false;
+                                
+                                // Match by invoice ID or reference
+                                if (payment.invoiceId && payment.invoiceId === r.invoiceId) return true;
+                                const ref = norm(payment.reference);
+                                if (!ref) return false;
+                                const sys = norm(systemInvoiceNo);
+                                const man = norm(manualInvoiceNo);
+                                return (sys && ref.includes(sys)) || (man && ref.includes(man));
+                              })
+                              .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+                            
+                            // Calculate cumulative amounts
+                            let cumulative = 0;
+                            const paymentsWithCumulative = invoicePayments.map((payment) => {
+                              cumulative += payment.amount || 0;
+                              return { ...payment, cumulative };
+                            });
+                            
+                            return (
+                              <>
+                                <TableRow key={r.invoiceId}>
+                                  <TableCell onClick={(e) => e.stopPropagation()}>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpandedInvoiceIds((prev) => {
+                                          const next = new Set(prev);
+                                          if (next.has(r.invoiceId)) {
+                                            next.delete(r.invoiceId);
+                                          } else {
+                                            next.add(r.invoiceId);
+                                          }
+                                          return next;
                                         });
+                                      }}
+                                    >
+                                      {isInvoiceExpanded ? (
+                                        <ChevronDown className="h-4 w-4" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </TableCell>
+                                  <TableCell>{r.date || "—"}</TableCell>
+                                  <TableCell>{r.type}</TableCell>
+                                  <TableCell className="font-medium">{r.invoiceNo || "—"}</TableCell>
+                                  <TableCell className="text-right font-medium text-success">{money(r.amountPaid)}</TableCell>
+                                  <TableCell className="text-right font-medium text-warning">{money(r.amountRemaining)}</TableCell>
+                                  <TableCell className="text-right font-medium">{money(r.totalAmount)}</TableCell>
+                                  <TableCell>
+                                    <span
+                                      className={
+                                        r.status === "Paid"
+                                          ? "rounded-full bg-success/20 text-success text-[11px] px-2 py-0.5 font-semibold"
+                                          : r.status === "Partially Paid"
+                                            ? "rounded-full bg-warning/20 text-warning text-[11px] px-2 py-0.5 font-semibold"
+                                            : "rounded-full bg-secondary text-secondary-foreground text-[11px] px-2 py-0.5 font-semibold"
                                       }
-                                    }}
-                                  >
-                                    Print
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))
+                                    >
+                                      {r.status}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const url = new URL(`/invoices/${r.invoiceId}/print`, window.location.origin).toString();
+                                          const w = window.open(url, "_blank", "noopener,noreferrer");
+                                          if (!w) {
+                                            toast({
+                                              title: "Popup blocked",
+                                              description: "Please allow popups to print the invoice.",
+                                              variant: "destructive",
+                                            });
+                                          }
+                                        }}
+                                      >
+                                        Print
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                                
+                                {isInvoiceExpanded && (
+                                  <TableRow>
+                                    <TableCell colSpan={9} className="bg-muted/30 p-0">
+                                      <div className="p-4">
+                                        <div className="text-sm font-semibold mb-3">
+                                          Payment & Adjustment Details for {r.invoiceNo}
+                                        </div>
+                                        <div className="rounded-md border bg-background">
+                                          <Table>
+                                            <TableHeader>
+                                              <TableRow>
+                                                <TableHead className="w-[50px]">#</TableHead>
+                                                <TableHead>Date</TableHead>
+                                                <TableHead>Method</TableHead>
+                                                <TableHead>Reference</TableHead>
+                                                <TableHead className="text-right">Amount</TableHead>
+                                                <TableHead className="text-right">Transfer Charge</TableHead>
+                                                <TableHead className="text-right">Cumulative</TableHead>
+                                                <TableHead>Notes</TableHead>
+                                                <TableHead>Status</TableHead>
+                                              </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                              {paymentsWithCumulative.length === 0 ? (
+                                                <TableRow>
+                                                  <TableCell colSpan={9} className="text-center text-muted-foreground">
+                                                    No payments found for this invoice.
+                                                  </TableCell>
+                                                </TableRow>
+                                              ) : (
+                                                paymentsWithCumulative.map((payment, idx) => (
+                                                  <TableRow key={payment.id}>
+                                                    <TableCell>{idx + 1}</TableCell>
+                                                    <TableCell>{payment.date}</TableCell>
+                                                    <TableCell>{payment.method}</TableCell>
+                                                    <TableCell>{payment.reference || "—"}</TableCell>
+                                                    <TableCell className="text-right font-medium">
+                                                      {money(payment.amount || 0)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                      {payment.bankTransferCharge && payment.bankTransferCharge > 0
+                                                        ? money(payment.bankTransferCharge)
+                                                        : "—"}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-semibold text-success">
+                                                      {money(payment.cumulative)}
+                                                    </TableCell>
+                                                    <TableCell>{payment.notes || "—"}</TableCell>
+                                                    <TableCell>
+                                                      <span
+                                                        className={
+                                                          payment.status === "Completed"
+                                                            ? "rounded-full bg-success/20 text-success text-[11px] px-2 py-0.5 font-semibold"
+                                                            : payment.status === "Pending"
+                                                              ? "rounded-full bg-warning/20 text-warning text-[11px] px-2 py-0.5 font-semibold"
+                                                              : "rounded-full bg-destructive/20 text-destructive text-[11px] px-2 py-0.5 font-semibold"
+                                                        }
+                                                      >
+                                                        {payment.status}
+                                                      </span>
+                                                    </TableCell>
+                                                  </TableRow>
+                                                ))
+                                              )}
+                                              {paymentsWithCumulative.length > 0 && (
+                                                <TableRow className="bg-muted/20 font-semibold">
+                                                  <TableCell colSpan={4} className="text-right">
+                                                    Total: {paymentsWithCumulative.length} payment{paymentsWithCumulative.length !== 1 ? 's' : ''}
+                                                  </TableCell>
+                                                  <TableCell className="text-right">
+                                                    Total Received: {money(cumulative)}
+                                                  </TableCell>
+                                                  <TableCell colSpan={4}></TableCell>
+                                                </TableRow>
+                                              )}
+                                            </TableBody>
+                                          </Table>
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </>
+                            );
+                          })
                         )}
                       </TableBody>
                     </Table>
@@ -1271,9 +1416,11 @@ export default function Payments() {
                   {invoices
                     .filter((inv) => inv.partyType === formData.partyType && inv.partyId === formData.partyId)
                     .map((inv) => {
-                      const labelNo = inv.manualInvoiceNo || inv.invoiceNo;
                       const systemInvoiceNo = inv.invoiceNo;
                       const manualInvoiceNo = inv.manualInvoiceNo;
+                      const displayLabel = manualInvoiceNo 
+                        ? `${systemInvoiceNo} (${manualInvoiceNo})`
+                        : systemInvoiceNo;
                       
                       // Calculate notes adjustments
                       const norm = (v: unknown) => (v ?? "").toString().trim().toLowerCase();
@@ -1311,7 +1458,7 @@ export default function Payments() {
                       
                       return (
                         <SelectItem key={inv.id} value={inv.id}>
-                          {labelNo} — Total: {money(adjustedTotal)} | Remaining: {money(remainingAmount)}
+                          {displayLabel} — Total: {money(adjustedTotal)} | Remaining: {money(remainingAmount)}
                         </SelectItem>
                       );
                     })}

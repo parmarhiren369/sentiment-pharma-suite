@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
@@ -23,7 +24,7 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { ArrowDownRight, ArrowUpRight, IndianRupee, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronRight, IndianRupee, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 type TransactionType = "Income" | "Expense";
 type TransactionStatus = "Completed" | "Pending" | "Failed";
@@ -72,6 +73,9 @@ export default function Transactions() {
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
   const [customers, setCustomers] = useState<PartyOption[]>([]);
   const [suppliers, setSuppliers] = useState<PartyOption[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [expandedInvoiceIds, setExpandedInvoiceIds] = useState<Set<string>>(new Set());
 
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -178,6 +182,48 @@ export default function Transactions() {
     setTransactions(list);
   };
 
+  const fetchInvoices = async () => {
+    const qy = query(collection(db, "invoices"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(qy);
+    const list = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        invoiceNo: (data.invoiceNo || "").toString(),
+        manualInvoiceNo: (data.manualInvoiceNo || "").toString() || undefined,
+        partyType: (data.partyType || "customer").toString(),
+        partyId: (data.partyId || "").toString(),
+        partyName: (data.partyName || "").toString(),
+        issueDate: (data.issueDate || "").toString(),
+        total: typeof data.total === "number" ? data.total : parseFloat(data.total) || 0,
+      };
+    });
+    setInvoices(list);
+  };
+
+  const fetchPayments = async () => {
+    const qy = query(collection(db, "payments"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(qy);
+    const list = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        date: (data.date || "").toString(),
+        invoiceId: (data.invoiceId || "").toString() || undefined,
+        invoiceNo: (data.invoiceNo || "").toString() || undefined,
+        amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
+        method: (data.method || "Cash").toString(),
+        reference: (data.reference || "").toString(),
+        bankTransferCharge: typeof data.bankTransferCharge === "number" ? data.bankTransferCharge : parseFloat(data.bankTransferCharge) || 0,
+        notes: (data.notes || "").toString() || undefined,
+        status: (data.status || "Completed").toString(),
+        partyId: (data.partyId || "").toString() || undefined,
+        partyType: (data.partyType || "customer").toString(),
+      };
+    });
+    setPayments(list);
+  };
+
   const fetchAll = async () => {
     if (!db) {
       toast({
@@ -190,7 +236,7 @@ export default function Transactions() {
 
     setIsLoading(true);
     try {
-      await Promise.all([fetchParties(), fetchTransactions()]);
+      await Promise.all([fetchParties(), fetchTransactions(), fetchInvoices(), fetchPayments()]);
     } catch (error) {
       console.error("Error fetching transactions", error);
       toast({
@@ -458,7 +504,203 @@ export default function Transactions() {
 
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="p-4">
-            <DataTable data={filtered} columns={columns} keyField="id" onRowClick={openEdit} />
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[40px]"></TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Party</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center text-muted-foreground">
+                        No transactions found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filtered.map((t) => {
+                      // Check if this transaction has an associated invoice
+                      const matchedInvoice = invoices.find((inv) => {
+                        const refLower = (t.reference || "").toLowerCase();
+                        const invNoLower = (inv.invoiceNo || "").toLowerCase();
+                        const manualInvNoLower = (inv.manualInvoiceNo || "").toLowerCase();
+                        return (
+                          (t.partyType === inv.partyType && 
+                           t.partyId === inv.partyId &&
+                           (refLower.includes(invNoLower) || refLower.includes(manualInvNoLower)))
+                        );
+                      });
+                      
+                      const isExpanded = matchedInvoice && expandedInvoiceIds.has(matchedInvoice.id);
+                      
+                      // Get payments for this invoice
+                      const invoicePayments = matchedInvoice
+                        ? payments.filter((p) => {
+                            if (p.invoiceId === matchedInvoice.id) return true;
+                            const refLower = (p.reference || "").toLowerCase();
+                            const invNoLower = (matchedInvoice.invoiceNo || "").toLowerCase();
+                            const manualInvNoLower = (matchedInvoice.manualInvoiceNo || "").toLowerCase();
+                            return (
+                              p.partyType === matchedInvoice.partyType &&
+                              p.partyId === matchedInvoice.partyId &&
+                              (refLower.includes(invNoLower) || refLower.includes(manualInvNoLower))
+                            );
+                          }).sort((a, b) => (a.date || "").localeCompare(b.date || ""))
+                        : [];
+                      
+                      // Calculate cumulative amounts
+                      let cumulative = 0;
+                      const paymentsWithCumulative = invoicePayments.map((p) => {
+                        cumulative += p.amount;
+                        return { ...p, cumulative };
+                      });
+                      
+                      return (
+                        <>
+                          <TableRow key={t.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openEdit(t)}>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              {matchedInvoice && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedInvoiceIds((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(matchedInvoice.id)) {
+                                        next.delete(matchedInvoice.id);
+                                      } else {
+                                        next.add(matchedInvoice.id);
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              )}
+                            </TableCell>
+                            <TableCell>{t.date}</TableCell>
+                            <TableCell>
+                              <span className={t.type === "Income" ? "text-success font-medium" : "text-destructive font-medium"}>
+                                {t.type}
+                              </span>
+                            </TableCell>
+                            <TableCell>{t.description}</TableCell>
+                            <TableCell>{t.category}</TableCell>
+                            <TableCell>
+                              <span className="font-medium">₹{(t.amount || 0).toLocaleString("en-IN")}</span>
+                            </TableCell>
+                            <TableCell>{t.partyName}</TableCell>
+                            <TableCell>{t.status}</TableCell>
+                            <TableCell>{t.reference}</TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" className="gap-1" onClick={() => openEdit(t)}>
+                                  <Pencil className="w-4 h-4" />
+                                  Edit
+                                </Button>
+                                <Button variant="destructive" size="sm" className="gap-1" onClick={() => handleDelete(t.id)}>
+                                  <Trash2 className="w-4 h-4" />
+                                  Delete
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                          
+                          {isExpanded && (
+                            <TableRow>
+                              <TableCell colSpan={10} className="bg-muted/30 p-0">
+                                <div className="p-4">
+                                  <div className="text-sm font-semibold mb-3">
+                                    Payment History for Invoice: {matchedInvoice.manualInvoiceNo || matchedInvoice.invoiceNo}
+                                  </div>
+                                  <div className="rounded-md border bg-background">
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead className="w-[60px]">S.No</TableHead>
+                                          <TableHead>Date</TableHead>
+                                          <TableHead>Method</TableHead>
+                                          <TableHead>Reference</TableHead>
+                                          <TableHead className="text-right">Amount</TableHead>
+                                          <TableHead className="text-right">Transfer Charge</TableHead>
+                                          <TableHead className="text-right">Cumulative</TableHead>
+                                          <TableHead>Notes</TableHead>
+                                          <TableHead>Status</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {paymentsWithCumulative.length === 0 ? (
+                                          <TableRow>
+                                            <TableCell colSpan={9} className="text-center text-muted-foreground">
+                                              No payments found for this invoice.
+                                            </TableCell>
+                                          </TableRow>
+                                        ) : (
+                                          paymentsWithCumulative.map((p, idx) => (
+                                            <TableRow key={p.id}>
+                                              <TableCell>{idx + 1}</TableCell>
+                                              <TableCell>{p.date}</TableCell>
+                                              <TableCell>{p.method}</TableCell>
+                                              <TableCell>{p.reference || "—"}</TableCell>
+                                              <TableCell className="text-right font-medium">
+                                                ₹{p.amount.toLocaleString("en-IN")}
+                                              </TableCell>
+                                              <TableCell className="text-right">
+                                                {p.bankTransferCharge > 0
+                                                  ? `₹${p.bankTransferCharge.toLocaleString("en-IN")}`
+                                                  : "—"}
+                                              </TableCell>
+                                              <TableCell className="text-right font-semibold text-success">
+                                                ₹{p.cumulative.toLocaleString("en-IN")}
+                                              </TableCell>
+                                              <TableCell>{p.notes || "—"}</TableCell>
+                                              <TableCell>
+                                                <span
+                                                  className={
+                                                    p.status === "Completed"
+                                                      ? "rounded-full bg-success/20 text-success text-[11px] px-2 py-0.5 font-semibold"
+                                                      : p.status === "Pending"
+                                                        ? "rounded-full bg-warning/20 text-warning text-[11px] px-2 py-0.5 font-semibold"
+                                                        : "rounded-full bg-destructive/20 text-destructive text-[11px] px-2 py-0.5 font-semibold"
+                                                  }
+                                                >
+                                                  {p.status}
+                                                </span>
+                                              </TableCell>
+                                            </TableRow>
+                                          ))
+                                        )}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </div>
       </div>

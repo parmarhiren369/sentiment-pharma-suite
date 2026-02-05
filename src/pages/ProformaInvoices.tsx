@@ -551,7 +551,7 @@ export default function ProformaInvoices() {
           <div className="flex flex-col md:flex-row md:items-center gap-3 justify-between">
             <div className="flex items-center gap-2">
               <Input
-                placeholder="Search proformaInvoice no, party, status..."
+                placeholder="Search proforma invoice no, party, status..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full md:w-96"
@@ -563,10 +563,10 @@ export default function ProformaInvoices() {
             </div>
 
             <div className="flex items-center gap-2">
-              <ExportExcelButton rows={exportRows} fileName="proformaInvoices" sheetName="ProformaInvoices" label="Export" variant="outline" />
-              <Button className="gap-2" onClick={() => navigate("/proformaInvoices/new")}>
+              <ExportExcelButton rows={exportRows} fileName="proforma_invoices" sheetName="Proforma Invoices" label="Export" variant="outline" />
+              <Button className="gap-2" onClick={() => navigate("/proforma-invoices/new")}>
                 <Plus className="w-4 h-4" />
-                Add ProformaInvoice
+                New Proforma Invoice
               </Button>
             </div>
           </div>

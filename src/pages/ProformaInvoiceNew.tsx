@@ -302,8 +302,8 @@ export default function ProformaInvoiceNew() {
         tx.set(proformaInvoiceRef, payload);
       });
 
-      toast({ title: "Saved", description: "ProformaInvoice saved to Firestore." });
-      navigate("/proformaInvoices");
+      toast({ title: "Saved", description: "Proforma Invoice saved successfully." });
+      navigate("/proforma-invoices");
     } catch (error) {
       console.error("Error saving proformaInvoice", error);
       const msg = error instanceof Error ? error.message : "Could not save proformaInvoice.";
@@ -329,7 +329,7 @@ export default function ProformaInvoiceNew() {
             </div>
           </div>
 
-          <Button variant="outline" className="gap-2" onClick={() => navigate("/proformaInvoices")} disabled={isSubmitting}>
+          <Button variant="outline" className="gap-2" onClick={() => navigate("/proforma-invoices")} disabled={isSubmitting}>
             <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
@@ -656,11 +656,11 @@ export default function ProformaInvoiceNew() {
           </Card>
 
           <div className="flex items-center justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => navigate("/proformaInvoices")} disabled={isSubmitting}>
+            <Button type="button" variant="outline" onClick={() => navigate("/proforma-invoices")} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving..." : "Save ProformaInvoice"}
+              {isSubmitting ? "Saving..." : "Save Proforma Invoice"}
             </Button>
           </div>
         </form>

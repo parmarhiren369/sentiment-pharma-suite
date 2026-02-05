@@ -41,7 +41,7 @@ interface InvoiceLineItem {
   unit: string;
   quantity: number;
   rate: number;
-  taxType?: "CGST / SGST" | "JGST";
+  taxType?: "CGST / SGST" | "IGST";
   tax?: number;
 }
 
@@ -701,7 +701,7 @@ export default function Invoices() {
                           <TableHead className="w-[110px] text-right">TAX (%)</TableHead>
                           <TableHead className="w-[110px] text-right">CGST (%)</TableHead>
                           <TableHead className="w-[110px] text-right">SGST (%)</TableHead>
-                          <TableHead className="w-[110px] text-right">JGST (%)</TableHead>
+                          <TableHead className="w-[110px] text-right">IGST (%)</TableHead>
                           <TableHead className="w-[120px] text-right">Tax Amt</TableHead>
                           <TableHead className="w-[130px] text-right">Amount</TableHead>
                           <TableHead className="w-[80px]" />
@@ -715,7 +715,7 @@ export default function Invoices() {
                           const type = it.taxType || "CGST / SGST";
                           const cgstPercent = type === "CGST / SGST" ? taxPercent / 2 : 0;
                           const sgstPercent = type === "CGST / SGST" ? taxPercent / 2 : 0;
-                          const jgstPercent = type === "JGST" ? taxPercent : 0;
+                          const igstPercent = type === "IGST" ? taxPercent : 0;
                           const taxAmount = (baseAmount * taxPercent) / 100;
                           const amount = baseAmount + taxAmount;
 
@@ -790,7 +790,7 @@ export default function Invoices() {
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="CGST / SGST">CGST / SGST</SelectItem>
-                                    <SelectItem value="JGST">JGST</SelectItem>
+                                    <SelectItem value="IGST">IGST</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </TableCell>
@@ -817,7 +817,7 @@ export default function Invoices() {
                               </TableCell>
 
                               <TableCell className="align-top">
-                                <Input className="w-[110px] text-right bg-muted" value={jgstPercent.toFixed(2)} readOnly />
+                                <Input className="w-[110px] text-right bg-muted" value={igstPercent.toFixed(2)} readOnly />
                               </TableCell>
 
                               <TableCell className="align-top">

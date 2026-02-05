@@ -29,7 +29,7 @@ interface InvoiceLineItem {
   unit: string;
   quantity: number;
   rate: number;
-  taxType?: "CGST / SGST" | "JGST";
+  taxType?: "CGST / SGST" | "IGST";
   tax?: number;
 }
 
@@ -463,7 +463,7 @@ export default function InvoiceNew() {
                       <TableHead className="w-[110px] text-right">TAX (%)</TableHead>
                       <TableHead className="w-[110px] text-right">CGST (%)</TableHead>
                       <TableHead className="w-[110px] text-right">SGST (%)</TableHead>
-                      <TableHead className="w-[110px] text-right">JGST (%)</TableHead>
+                      <TableHead className="w-[110px] text-right">IGST (%)</TableHead>
                       <TableHead className="w-[120px] text-right">Tax Amt</TableHead>
                       <TableHead className="w-[130px] text-right">Amount</TableHead>
                       <TableHead className="w-[60px]" />
@@ -477,7 +477,7 @@ export default function InvoiceNew() {
                       const type = it.taxType || "CGST / SGST";
                       const cgstPercent = type === "CGST / SGST" ? taxPercent / 2 : 0;
                       const sgstPercent = type === "CGST / SGST" ? taxPercent / 2 : 0;
-                      const jgstPercent = type === "JGST" ? taxPercent : 0;
+                      const igstPercent = type === "IGST" ? taxPercent : 0;
                       const taxAmount = (baseAmount * taxPercent) / 100;
                       const amount = baseAmount + taxAmount;
 
@@ -552,7 +552,7 @@ export default function InvoiceNew() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="CGST / SGST">CGST / SGST</SelectItem>
-                                <SelectItem value="JGST">JGST</SelectItem>
+                                <SelectItem value="IGST">IGST</SelectItem>
                               </SelectContent>
                             </Select>
                           </TableCell>
@@ -579,7 +579,7 @@ export default function InvoiceNew() {
                           </TableCell>
 
                           <TableCell className="align-top">
-                            <Input className="w-[110px] text-right bg-muted" value={jgstPercent.toFixed(2)} readOnly />
+                            <Input className="w-[110px] text-right bg-muted" value={igstPercent.toFixed(2)} readOnly />
                           </TableCell>
 
                           <TableCell className="align-top">
@@ -634,7 +634,7 @@ export default function InvoiceNew() {
           </Card>
 
           <Card className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="subtotal">Subtotal</Label>
                 <Input
@@ -643,22 +643,6 @@ export default function InvoiceNew() {
                   inputMode="decimal"
                   value={computedSubtotal.toString()}
                   onChange={(e) => setFormData((s) => ({ ...s, subtotal: e.target.value }))}
-                  placeholder="0"
-                  readOnly={lineItems.length > 0}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="taxPercent">Tax (%)</Label>
-                <Input
-                  id="taxPercent"
-                  type="number"
-                  inputMode="decimal"
-                  value={lineItems.length > 0 ? "0" : formData.taxPercent}
-                  onChange={(e) => {
-                    if (lineItems.length > 0) return;
-                    setFormData((s) => ({ ...s, taxPercent: e.target.value }));
-                  }}
                   placeholder="0"
                   readOnly={lineItems.length > 0}
                 />

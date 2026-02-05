@@ -78,6 +78,7 @@ interface BankAccount {
 interface PartyOption {
   id: string;
   name: string;
+  opening?: number;
 }
 
 type PartyType = "customer" | "supplier";
@@ -212,6 +213,7 @@ export default function Payments() {
         const partyNotes = notes.filter((x) => x.partyType === activePartyType && x.partyId === p.id);
         const partyPayments = completedPayments.filter((x) => x.partyType === activePartyType && x.partyId === p.id);
 
+        const opening = Number(p.opening) || 0;
         const totalInvoiced = partyInvoices.reduce((sum, x) => sum + (x.total || 0), 0);
 
         const creditAdjustments = partyNotes.filter((n) => n.noteType === "Credit").reduce((sum, n) => sum + (n.amount || 0), 0);
@@ -222,7 +224,7 @@ export default function Payments() {
           .filter((x) => x.direction === settledDirection)
           .reduce((sum, x) => sum + (x.amount || 0), 0);
 
-        const balance = totalInvoiced + debitAdjustments - creditAdjustments - settled;
+        const balance = opening + totalInvoiced + debitAdjustments - creditAdjustments - settled;
         const outstanding = Math.max(0, balance);
         const advance = Math.max(0, -balance);
 
@@ -232,6 +234,7 @@ export default function Payments() {
         return {
           id: p.id,
           name: p.name,
+          opening,
           totalInvoiced,
           settled,
           creditAdjustments,
@@ -252,7 +255,7 @@ export default function Payments() {
     const totalOutstanding = partySummaries.reduce((sum, x) => sum + x.outstanding, 0);
     const overdueAmount = partySummaries.reduce((sum, x) => sum + x.overdueOutstanding, 0);
     const advancePayments = partySummaries.reduce((sum, x) => sum + x.advance, 0);
-    const activeCount = partySummaries.filter((x) => x.totalInvoiced > 0 || x.settled > 0 || x.creditAdjustments > 0 || x.debitAdjustments > 0).length;
+    const activeCount = partySummaries.filter((x) => x.opening !== 0 || x.totalInvoiced > 0 || x.settled > 0 || x.creditAdjustments > 0 || x.debitAdjustments > 0).length;
     return { totalOutstanding, overdueAmount, advancePayments, activeCount };
   }, [partySummaries]);
 
@@ -275,12 +278,26 @@ export default function Payments() {
     ]);
 
     const customersList = customersSnap.docs
-      .map((d) => ({ id: d.id, name: (d.data().name || "").toString() }))
+      .map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: (data.name || "").toString(),
+          opening: typeof data.opening === "number" ? data.opening : parseFloat(data.opening) || 0,
+        };
+      })
       .filter((x) => x.name)
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const suppliersList = suppliersSnap.docs
-      .map((d) => ({ id: d.id, name: (d.data().name || "").toString() }))
+      .map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: (data.name || "").toString(),
+          opening: typeof data.opening === "number" ? data.opening : parseFloat(data.opening) || 0,
+        };
+      })
       .filter((x) => x.name)
       .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -442,6 +459,7 @@ export default function Payments() {
 
   const buildPartyInvoiceHistoryRows = (summary: (typeof partySummaries)[number]) => {
     type InvoiceHistoryRow = {
+      rowType: "opening" | "invoice";
       invoiceId: string;
       date: string;
       type: string;
@@ -494,7 +512,26 @@ export default function Payments() {
       };
     };
 
-    return byDateAsc.map((inv) => {
+    const rows: InvoiceHistoryRow[] = [];
+
+    const opening = Number(summary.opening) || 0;
+    if (opening !== 0) {
+      const openingAmount = Math.abs(opening);
+      const isAdvance = opening < 0;
+      rows.push({
+        rowType: "opening",
+        invoiceId: `opening-${summary.id}`,
+        date: "",
+        type: isAdvance ? "Opening Balance (Advance)" : "Opening Balance",
+        invoiceNo: "—",
+        amountPaid: isAdvance ? openingAmount : 0,
+        amountRemaining: isAdvance ? 0 : openingAmount,
+        totalAmount: openingAmount,
+        status: isAdvance ? "Paid" : "Unpaid",
+      });
+    }
+
+    byDateAsc.forEach((inv) => {
       const systemInvoiceNo = (inv.invoiceNo || "").toString();
       const manualInvoiceNo = inv.manualInvoiceNo;
       const displayInvoiceNo = manualInvoiceNo || systemInvoiceNo;
@@ -513,7 +550,8 @@ export default function Payments() {
 
       const typeLabel = activePartyType === "customer" ? "Invoice (Sale)" : "Invoice (Purchase)";
 
-      return {
+      rows.push({
+        rowType: "invoice",
         invoiceId: inv.id,
         date: inv.issueDate || inv.dueDate || "",
         type: typeLabel,
@@ -522,13 +560,25 @@ export default function Payments() {
         amountRemaining,
         totalAmount: adjustedTotal,
         status,
-      } as InvoiceHistoryRow;
+      } as InvoiceHistoryRow);
     });
+
+    return rows;
   };
 
   const buildPartyTransactions = (summary: (typeof partySummaries)[number]) => {
     type TxRow = { date: string; kind: string; ref: string; amount: number };
     const rows: TxRow[] = [];
+
+    const opening = Number(summary.opening) || 0;
+    if (opening !== 0) {
+      rows.push({
+        date: "",
+        kind: "Opening Balance",
+        ref: "—",
+        amount: opening,
+      });
+    }
 
     for (const inv of summary.invoices) {
       rows.push({
@@ -594,6 +644,7 @@ export default function Payments() {
           <h1>${summary.name} — Statement</h1>
           <div class="muted">Generated on ${new Date().toLocaleString()}</div>
           <div class="kpi">
+            <div><b>Opening balance</b><br/>${rupees(summary.opening)}</div>
             <div><b>Total invoiced</b><br/>${rupees(summary.totalInvoiced)}</div>
             <div><b>Settled</b><br/>${rupees(summary.settled)}</div>
             <div><b>Adjustments (Credit)</b><br/>${rupees(summary.creditAdjustments)}</div>
@@ -1043,7 +1094,7 @@ export default function Payments() {
                     : "border-l-transparent";
 
             const isActive =
-              p.totalInvoiced > 0 || p.settled > 0 || p.creditAdjustments > 0 || p.debitAdjustments > 0;
+              p.opening !== 0 || p.totalInvoiced > 0 || p.settled > 0 || p.creditAdjustments > 0 || p.debitAdjustments > 0;
 
             const shortCode = partyShortCode(p.name);
 
@@ -1090,6 +1141,11 @@ export default function Payments() {
                       </div>
 
                       <div className="mt-2 flex flex-wrap gap-x-8 gap-y-2 text-sm">
+                        {p.opening !== 0 ? (
+                          <div className="text-muted-foreground">
+                            Opening Balance: <span className="text-foreground font-medium">{money(p.opening)}</span>
+                          </div>
+                        ) : null}
                         <div className="text-muted-foreground">
                           Total Invoiced: <span className="text-foreground font-medium">{money(p.totalInvoiced)}</span>
                         </div>
@@ -1180,20 +1236,46 @@ export default function Payments() {
                           </TableRow>
                         ) : (
                           invoiceRows.map((r) => {
+                            if (r.rowType === "opening") {
+                              return (
+                                <TableRow key={r.invoiceId}>
+                                  <TableCell>{r.date || "—"}</TableCell>
+                                  <TableCell>{r.type}</TableCell>
+                                  <TableCell></TableCell>
+                                  <TableCell className="font-medium">{r.invoiceNo || "—"}</TableCell>
+                                  <TableCell className="text-right font-medium text-success">{money(r.amountPaid)}</TableCell>
+                                  <TableCell className="text-right font-medium text-warning">{money(r.amountRemaining)}</TableCell>
+                                  <TableCell className="text-right font-medium">{money(r.totalAmount)}</TableCell>
+                                  <TableCell>
+                                    <span
+                                      className={
+                                        r.status === "Paid"
+                                          ? "rounded-full bg-success/20 text-success text-[11px] px-2 py-0.5 font-semibold"
+                                          : "rounded-full bg-secondary text-secondary-foreground text-[11px] px-2 py-0.5 font-semibold"
+                                      }
+                                    >
+                                      {r.status}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right text-muted-foreground">—</TableCell>
+                                </TableRow>
+                              );
+                            }
+
                             const isInvoiceExpanded = expandedInvoiceIds.has(r.invoiceId);
-                            
+
                             // Get payments for this invoice
                             const norm = (v: unknown) => (v ?? "").toString().trim().toLowerCase();
                             const inv = p.invoices.find(i => i.id === r.invoiceId);
                             const systemInvoiceNo = inv?.invoiceNo || "";
                             const manualInvoiceNo = inv?.manualInvoiceNo;
-                            
+
                             const settledDirection: PaymentDirection = activePartyType === "customer" ? "In" : "Out";
                             const invoicePayments = p.payments
                               .filter((payment) => {
                                 if (payment.direction !== settledDirection) return false;
                                 if (payment.status !== "Completed") return false;
-                                
+
                                 // Match by invoice ID or reference
                                 if (payment.invoiceId && payment.invoiceId === r.invoiceId) return true;
                                 const ref = norm(payment.reference);
@@ -1203,14 +1285,14 @@ export default function Payments() {
                                 return (sys && ref.includes(sys)) || (man && ref.includes(man));
                               })
                               .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-                            
+
                             // Calculate cumulative amounts
                             let cumulative = 0;
                             const paymentsWithCumulative = invoicePayments.map((payment) => {
                               cumulative += payment.amount || 0;
                               return { ...payment, cumulative };
                             });
-                            
+
                             return (
                               <>
                                 <TableRow key={r.invoiceId}>
@@ -1282,7 +1364,7 @@ export default function Payments() {
                                     </div>
                                   </TableCell>
                                 </TableRow>
-                                
+
                                 {isInvoiceExpanded && (
                                   <TableRow>
                                     <TableCell colSpan={9} className="bg-muted/30 p-0">

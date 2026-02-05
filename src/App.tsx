@@ -30,6 +30,10 @@ import DebitCreditNotes from "./pages/DebitCreditNotes";
 import DebitCreditNoteNew from "./pages/DebitCreditNoteNew";
 import BankBook from "./pages/BankBook";
 import CashBook from "./pages/CashBook";
+import Quotations from "./pages/Quotations";
+import QuotationNew from "./pages/QuotationNew";
+import ProformaInvoices from "./pages/ProformaInvoices";
+import ProformaInvoiceNew from "./pages/ProformaInvoiceNew";
 import { Suspense } from "react";
 
 console.log("App.tsx loaded");
@@ -82,6 +86,10 @@ const App = () => {
                   <Route path="/payments" element={<Payments />} />
                   <Route path="/invoices" element={<Invoices />} />
                   <Route path="/invoices/new" element={<InvoiceNew />} />
+                  <Route path="/quotations" element={<Quotations />} />
+                  <Route path="/quotations/new" element={<QuotationNew />} />
+                  <Route path="/proforma-invoices" element={<ProformaInvoices />} />
+                  <Route path="/proforma-invoices/new" element={<ProformaInvoiceNew />} />
                   <Route path="/debit-credit-notes" element={<DebitCreditNotes />} />
                   <Route path="/debit-credit-notes/new" element={<DebitCreditNoteNew />} />
                   <Route path="/doctors" element={<Doctors />} />

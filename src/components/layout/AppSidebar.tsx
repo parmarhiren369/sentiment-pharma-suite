@@ -17,7 +17,9 @@ import {
   ArrowLeftRight,
   CreditCard,
   FileText,
-  FileMinus
+  FileMinus,
+  FileCheck,
+  FileSignature
 } from "lucide-react";
 
 const mainMenuItems = [
@@ -31,6 +33,8 @@ const mainMenuItems = [
   { title: "Transactions", url: "/transactions", icon: ArrowLeftRight },
   { title: "Payments", url: "/payments", icon: CreditCard },
   { title: "Invoices", url: "/invoices", icon: FileText },
+  { title: "Quotations", url: "/quotations", icon: FileSignature },
+  { title: "Proforma Invoices", url: "/proforma-invoices", icon: FileCheck },
   { title: "Debit/Credit Notes", url: "/debit-credit-notes", icon: FileMinus },
   { title: "Doctors", url: "/doctors", icon: Stethoscope },
   { title: "Loss Calculation", url: "/loss-calculation", icon: Calculator },

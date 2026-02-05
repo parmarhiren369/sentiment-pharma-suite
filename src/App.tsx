@@ -28,6 +28,8 @@ import InvoiceNew from "./pages/InvoiceNew";
 import InvoicePrint from "./pages/InvoicePrint";
 import DebitCreditNotes from "./pages/DebitCreditNotes";
 import DebitCreditNoteNew from "./pages/DebitCreditNoteNew";
+import BankBook from "./pages/BankBook";
+import CashBook from "./pages/CashBook";
 import { Suspense } from "react";
 
 console.log("App.tsx loaded");
@@ -75,6 +77,8 @@ const App = () => {
                   <Route path="/processing" element={<Processing />} />
                   <Route path="/accounting" element={<Accounting />} />
                   <Route path="/transactions" element={<Transactions />} />
+                  <Route path="/bank-book" element={<BankBook />} />
+                  <Route path="/cash-book" element={<CashBook />} />
                   <Route path="/payments" element={<Payments />} />
                   <Route path="/invoices" element={<Invoices />} />
                   <Route path="/invoices/new" element={<InvoiceNew />} />

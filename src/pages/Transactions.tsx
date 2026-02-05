@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { Button } from "@/components/ui/button";
@@ -91,6 +92,7 @@ function safeNumber(value: string): number {
 }
 
 export default function Transactions() {
+  const navigate = useNavigate();
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [cashAccounts, setCashAccounts] = useState<CashAccount[]>([]);
@@ -377,7 +379,10 @@ export default function Transactions() {
         {/* Bank and Cash Book Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Bank Book Card */}
-          <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+          <Card 
+            className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white cursor-pointer hover:shadow-lg transition-shadow"
+            onClick={() => navigate("/bank-book")}
+          >
             <div className="flex items-center gap-3 mb-4">
               <div className="h-12 w-12 rounded-lg bg-white/20 flex items-center justify-center">
                 <BookOpen className="h-6 w-6" />
@@ -400,7 +405,10 @@ export default function Transactions() {
           </Card>
 
           {/* Cash Book Card */}
-          <Card className="p-6 bg-gradient-to-br from-green-500 to-green-600 text-white">
+          <Card 
+            className="p-6 bg-gradient-to-br from-green-500 to-green-600 text-white cursor-pointer hover:shadow-lg transition-shadow"
+            onClick={() => navigate("/cash-book")}
+          >
             <div className="flex items-center gap-3 mb-4">
               <div className="h-12 w-12 rounded-lg bg-white/20 flex items-center justify-center">
                 <Wallet className="h-6 w-6" />

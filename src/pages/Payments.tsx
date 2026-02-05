@@ -1558,7 +1558,62 @@ export default function Payments() {
                   type="number"
                   inputMode="decimal"
                   value={formData.amount}
-                  onChange={(e) => setFormData((s) => ({ ...s, amount: e.target.value }))}
+                  onChange={(e) => {
+                    const inputValue = e.target.value;
+                    
+                    // Calculate remaining amount if invoice is selected
+                    if (formData.invoiceId) {
+                      const inv = invoices.find((x) => x.id === formData.invoiceId);
+                      if (inv) {
+                        const norm = (v: unknown) => (v ?? "").toString().trim().toLowerCase();
+                        const systemInvoiceNo = inv.invoiceNo;
+                        const manualInvoiceNo = inv.manualInvoiceNo;
+                        
+                        // Calculate notes adjustments
+                        const relatedNotes = notes.filter((n) => {
+                          const invNo = norm(n.relatedInvoiceNo);
+                          const sys = norm(systemInvoiceNo);
+                          const man = norm(manualInvoiceNo);
+                          return (sys && invNo === sys) || (man && invNo === man);
+                        });
+                        
+                        const debitAdjust = relatedNotes.filter((n) => n.noteType === "Debit").reduce((sum, n) => sum + (n.amount || 0), 0);
+                        const creditAdjust = relatedNotes.filter((n) => n.noteType === "Credit").reduce((sum, n) => sum + (n.amount || 0), 0);
+                        
+                        const baseTotal = inv.total || 0;
+                        const adjustedTotal = Math.max(0, baseTotal + debitAdjust - creditAdjust);
+                        
+                        // Calculate payments for this invoice
+                        const settledDirection: PaymentDirection = formData.partyType === "customer" ? "In" : "Out";
+                        const relatedPayments = payments.filter((p) => {
+                          if (p.id === editing?.id) return false; // Exclude current payment if editing
+                          if (p.status !== "Completed") return false;
+                          if (p.direction !== settledDirection) return false;
+                          if (p.partyType !== formData.partyType || p.partyId !== formData.partyId) return false;
+                          
+                          // Match by invoice ID or reference
+                          if (p.invoiceId && p.invoiceId === inv.id) return true;
+                          const ref = norm(p.reference);
+                          if (!ref) return false;
+                          const sys = norm(systemInvoiceNo);
+                          const man = norm(manualInvoiceNo);
+                          return (sys && ref.includes(sys)) || (man && ref.includes(man));
+                        });
+                        
+                        const paidAmount = relatedPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+                        const remainingAmount = Math.max(0, adjustedTotal - paidAmount);
+                        
+                        // Limit input to remaining amount
+                        const inputNum = parseFloat(inputValue) || 0;
+                        if (inputNum > remainingAmount) {
+                          setFormData((s) => ({ ...s, amount: remainingAmount.toString() }));
+                          return;
+                        }
+                      }
+                    }
+                    
+                    setFormData((s) => ({ ...s, amount: inputValue }));
+                  }}
                   placeholder="0.00"
                 />
               </div>
@@ -1592,10 +1647,7 @@ export default function Payments() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Cash">Cash</SelectItem>
-                    <SelectItem value="UPI">UPI</SelectItem>
-                    <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-                    <SelectItem value="Card">Card</SelectItem>
-                    <SelectItem value="Cheque">Cheque</SelectItem>
+                    <SelectItem value="Bank Transfer">Bank</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

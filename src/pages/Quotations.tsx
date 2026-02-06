@@ -340,26 +340,29 @@ export default function Quotations() {
                         </span>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleConvertToProformaInvoice(quot)}
-                            title="Convert to Proforma Invoice"
-                          >
-                            <FileCheck className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleConvertToInvoice(quot)}
-                            title="Convert to Invoice"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(quot.id)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-muted-foreground">Convert To:</div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleConvertToProformaInvoice(quot)}
+                              title="Convert to Proforma Invoice"
+                            >
+                              <FileCheck className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleConvertToInvoice(quot)}
+                              title="Convert to Invoice"
+                            >
+                              <FileText className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDelete(quot.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                       </TableCell>
                     </TableRow>

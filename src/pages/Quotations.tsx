@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, deleteDoc, doc, getDocs, orderBy, query } from "firebase/firestore";
-import { Calendar, DollarSign, FileText, Filter, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { collection, deleteDoc, doc, getDocs, orderBy, query, addDoc, Timestamp } from "firebase/firestore";
+import { Calendar, DollarSign, FileText, Filter, Plus, RefreshCw, Search, Trash2, FileCheck } from "lucide-react";
 
 interface QuotationRecord {
   id: string;
@@ -123,6 +123,104 @@ export default function Quotations() {
       toast({
         title: "Delete failed",
         description: "Could not delete quotation.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleConvertToProformaInvoice = async (quotation: QuotationRecord) => {
+    if (!db) return;
+
+    try {
+      // Get the latest proforma invoice number
+      const q = query(collection(db, "proformaInvoices"), orderBy("createdAt", "desc"));
+      const snap = await getDocs(q);
+      
+      let nextNumber = 1;
+      if (snap.docs.length > 0) {
+        const lastDoc = snap.docs[0].data();
+        const lastNum = lastDoc.proformaInvoiceNo || "PI-0";
+        const match = lastNum.match(/PI-(\d+)/);
+        if (match) nextNumber = parseInt(match[1], 10) + 1;
+      }
+
+      const proformaInvoiceNo = `PI-${String(nextNumber).padStart(4, "0")}`;
+
+      // Create the proforma invoice
+      await addDoc(collection(db, "proformaInvoices"), {
+        proformaInvoiceNo,
+        partyType: quotation.partyType,
+        partyId: quotation.partyId,
+        partyName: quotation.partyName,
+        issueDate: quotation.issueDate,
+        lineItems: quotation.lineItems || [],
+        subtotal: quotation.total,
+        total: quotation.total,
+        status: "In Process",
+        notes: `Converted from quotation ${quotation.manualQuotationNo || quotation.quotationNo}${quotation.notes ? "\n" + quotation.notes : ""}`,
+        createdAt: Timestamp.now(),
+      });
+
+      toast({
+        title: "Converted",
+        description: `Quotation converted to Proforma Invoice ${proformaInvoiceNo}`,
+      });
+
+      navigate("/proforma-invoices");
+    } catch (error) {
+      console.error("Error converting to proforma invoice", error);
+      toast({
+        title: "Conversion failed",
+        description: "Could not convert to proforma invoice.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleConvertToInvoice = async (quotation: QuotationRecord) => {
+    if (!db) return;
+
+    try {
+      // Get the latest invoice number
+      const q = query(collection(db, "invoices"), orderBy("createdAt", "desc"));
+      const snap = await getDocs(q);
+      
+      let nextNumber = 1;
+      if (snap.docs.length > 0) {
+        const lastDoc = snap.docs[0].data();
+        const lastNum = lastDoc.invoiceNo || "INV-0";
+        const match = lastNum.match(/INV-(\d+)/);
+        if (match) nextNumber = parseInt(match[1], 10) + 1;
+      }
+
+      const invoiceNo = `INV-${String(nextNumber).padStart(4, "0")}`;
+
+      // Create the invoice
+      await addDoc(collection(db, "invoices"), {
+        invoiceNo,
+        partyType: quotation.partyType,
+        partyId: quotation.partyId,
+        partyName: quotation.partyName,
+        issueDate: quotation.issueDate,
+        lineItems: quotation.lineItems || [],
+        subtotal: quotation.total,
+        total: quotation.total,
+        status: "Unpaid",
+        notes: `Converted from quotation ${quotation.manualQuotationNo || quotation.quotationNo}${quotation.notes ? "\n" + quotation.notes : ""}`,
+        createdAt: Timestamp.now(),
+      });
+
+      toast({
+        title: "Converted",
+        description: `Quotation converted to Invoice ${invoiceNo}`,
+      });
+
+      navigate("/invoices");
+    } catch (error) {
+      console.error("Error converting to invoice", error);
+      toast({
+        title: "Conversion failed",
+        description: "Could not convert to invoice.",
         variant: "destructive",
       });
     }
@@ -243,6 +341,22 @@ export default function Quotations() {
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleConvertToProformaInvoice(quot)}
+                            title="Convert to Proforma Invoice"
+                          >
+                            <FileCheck className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleConvertToInvoice(quot)}
+                            title="Convert to Invoice"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </Button>
                           <Button variant="ghost" size="sm" onClick={() => handleDelete(quot.id)}>
                             <Trash2 className="w-4 h-4" />
                           </Button>

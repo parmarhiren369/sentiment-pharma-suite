@@ -124,7 +124,7 @@ export default function Transactions() {
       .filter((t) => t.type === "Withdrawal" && t.status === "Completed")
       .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-    // Calculate actual balance for each bank account
+    // Calculate actual balance for each bank account (opening + transactions)
     const totalBankBalance = bankAccounts.reduce((sum, b) => {
       const accountTxs = transactions.filter(t => t.accountId === b.id && t.status === "Completed");
       const accountDeposits = accountTxs.filter(t => t.type === "Deposit").reduce((s, t) => s + t.amount, 0);
@@ -133,7 +133,7 @@ export default function Transactions() {
       return sum + accountBalance;
     }, 0);
 
-    // Calculate actual balance for each cash account
+    // Calculate actual balance for each cash account (opening + transactions)
     const totalCashBalance = cashAccounts.reduce((sum, c) => {
       const accountTxs = transactions.filter(t => t.accountId === c.id && t.status === "Completed");
       const accountDeposits = accountTxs.filter(t => t.type === "Deposit").reduce((s, t) => s + t.amount, 0);
@@ -141,6 +141,14 @@ export default function Transactions() {
       const accountBalance = (c.opening || 0) + accountDeposits - accountWithdrawals;
       return sum + accountBalance;
     }, 0);
+    
+    console.log("Stats calculation:", {
+      bankAccountsCount: bankAccounts.length,
+      cashAccountsCount: cashAccounts.length,
+      totalBankBalance,
+      totalCashBalance,
+      transactionsCount: transactions.length
+    });
 
     return {
       total: transactions.length,
@@ -217,6 +225,7 @@ export default function Transactions() {
   };
 
   const fetchTransactions = async () => {
+    // Fetch from accountingTransactions collection
     const qy = query(collection(db, "accountingTransactions"), orderBy("createdAt", "desc"));
     const snap = await getDocs(qy);
     const list = snap.docs.map((d) => {
@@ -239,6 +248,18 @@ export default function Transactions() {
         createdAt: data.createdAt?.toDate?.() || new Date(),
       } as TransactionRecord;
     });
+    
+    console.log("Fetched transactions:", list.length);
+    console.log("Bank accounts:", bankAccounts.map(b => ({ id: b.id, name: b.accountName, opening: b.opening })));
+    console.log("Cash accounts:", cashAccounts.map(c => ({ id: c.id, name: c.accountName, opening: c.opening })));
+    console.log("Sample transactions with accountIds:", list.slice(0, 5).map(t => ({ 
+      desc: t.description, 
+      accountId: t.accountId, 
+      accountName: t.accountName,
+      amount: t.amount,
+      type: t.type 
+    })));
+    
     setTransactions(list);
   };
 

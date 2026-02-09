@@ -59,7 +59,10 @@ export default function PaymentPrint() {
           return;
         }
         setPayment(snap.data() as PaymentDoc);
-        setTimeout(() => window.print(), 50);
+        // Auto-print after content loads
+        setTimeout(() => {
+          window.print();
+        }, 500);
       } catch (error) {
         console.error("Error loading payment", error);
         toast({ title: "Load failed", description: "Could not load payment.", variant: "destructive" });
@@ -70,6 +73,10 @@ export default function PaymentPrint() {
 
     load();
   }, [paymentId, toast]);
+
+  const handlePrint = () => {
+    window.print();
+  };
 
   const partyLabel = useMemo(() => {
     if (payment?.partyType === "supplier") return "Supplier";
@@ -101,7 +108,7 @@ export default function PaymentPrint() {
             <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
-          <Button className="gap-2" onClick={() => window.print()}>
+          <Button className="gap-2" onClick={handlePrint}>
             <Printer className="w-4 h-4" />
             Print
           </Button>

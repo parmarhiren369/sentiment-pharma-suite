@@ -736,6 +736,160 @@ export default function Payments() {
     w.print();
   };
 
+  const printPaymentStatement = (payment: PaymentRecord) => {
+    const partyLabel =
+      payment.partyType === "supplier"
+        ? "Supplier"
+        : payment.partyType === "customer"
+          ? "Customer"
+          : "Party";
+
+    const formatDate = (value?: string) => {
+      if (!value) return "—";
+      const dt = new Date(value);
+      if (Number.isNaN(dt.getTime())) return value;
+      const dd = `${dt.getDate()}`.padStart(2, "0");
+      const mm = `${dt.getMonth() + 1}`.padStart(2, "0");
+      return `${dd}/${mm}/${dt.getFullYear()}`;
+    };
+
+    const accountName = payment.bankAccountName || payment.cashAccountName || "—";
+    const methodLabel = payment.method || "—";
+    const referenceLabel = payment.reference || "—";
+    const paymentAmount = Number(payment.amount) || 0;
+
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Statement - ${payment.partyName || "Payment"}</title>
+          <style>
+            *{box-sizing:border-box;}
+            body{font-family:Arial, Helvetica, sans-serif; padding:24px; color:#111;}
+            .header{display:flex; justify-content:space-between; align-items:flex-start;}
+            .company{font-size:18px; font-weight:700; text-transform:uppercase;}
+            .statement{font-size:14px; font-weight:700; text-align:right;}
+            .date-box{border:1px solid #111; padding:4px 10px; font-size:12px; display:inline-block; margin-top:6px;}
+            .box{border:1px solid #111; margin-top:10px;}
+            .box .row{padding:8px; font-size:12px;}
+            .box .row .label{font-weight:700;}
+            .grid{display:grid; grid-template-columns:1fr 1fr;}
+            .grid .cell{padding:8px; border-right:1px solid #111; border-top:1px solid #111; font-size:12px;}
+            .grid .cell:nth-child(2n){border-right:none;}
+            table{width:100%; border-collapse:collapse; margin-top:10px;}
+            th, td{border:1px solid #111; padding:6px; font-size:12px;}
+            th{text-align:left; background:#f2f2f2;}
+            td.num{text-align:right;}
+            .aging th, .aging td{font-size:11px;}
+            .footer{margin-top:10px; font-size:10px; color:#444; text-align:center;}
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company">Sentiment Pharma</div>
+            <div class="statement">
+              Statement<br/>
+              <span class="date-box">${formatDate(payment.date)}</span>
+            </div>
+          </div>
+
+          <div class="box">
+            <div class="row">
+              <span class="label">To</span><br/>
+              <span style="font-weight:700; text-transform:uppercase;">${payment.partyName || "—"}</span><br/>
+              <span style="font-size:11px; color:#555;">${partyLabel}</span>
+            </div>
+          </div>
+
+          <div class="box">
+            <div class="grid">
+              <div class="cell"><div style="color:#555;">Payment Method</div><div style="font-weight:700;">${methodLabel}</div></div>
+              <div class="cell"><div style="color:#555;">Reference</div><div style="font-weight:700;">${referenceLabel}</div></div>
+              <div class="cell"><div style="color:#555;">Account</div><div style="font-weight:700;">${accountName}</div></div>
+              <div class="cell"><div style="color:#555;">Status</div><div style="font-weight:700;">${payment.status}</div></div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Transaction</th>
+                <th class="num">Amount</th>
+                <th class="num">Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>${formatDate(payment.date)}</td>
+                <td>Opening Balance</td>
+                <td class="num">${rupees(0)}</td>
+                <td class="num">${rupees(0)}</td>
+              </tr>
+              <tr>
+                <td>${formatDate(payment.date)}</td>
+                <td>Payment ${methodLabel !== "—" ? `(${methodLabel})` : ""}</td>
+                <td class="num">${rupees(paymentAmount)}</td>
+                <td class="num">${rupees(paymentAmount)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <table class="aging">
+            <thead>
+              <tr>
+                <th>Current</th>
+                <th>1-30 Days</th>
+                <th>31-60 Days</th>
+                <th>61-90 Days</th>
+                <th>90+ Days</th>
+                <th class="num">Amount Due</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="num">${rupees(0)}</td>
+                <td class="num">${rupees(0)}</td>
+                <td class="num">${rupees(0)}</td>
+                <td class="num">${rupees(0)}</td>
+                <td class="num">${rupees(0)}</td>
+                <td class="num"><b>${rupees(paymentAmount)}</b></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="footer">Generated on ${new Date().toLocaleString("en-IN")}</div>
+        </body>
+      </html>
+    `;
+
+    const w = window.open("", "_blank");
+    if (!w) {
+      toast({ title: "Popup blocked", description: "Please allow popups to print the statement." });
+      return;
+    }
+
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+
+    const triggerPrint = () => {
+      try {
+        w.focus();
+        w.print();
+      } catch (error) {
+        console.error("Print failed", error);
+      }
+    };
+
+    if (w.document.readyState === "complete") {
+      triggerPrint();
+    } else {
+      w.onload = () => triggerPrint();
+      setTimeout(() => triggerPrint(), 600);
+    }
+  };
+
   const openEdit = (row: PaymentRecord) => {
     setEditing(row);
     setFormData({
@@ -1664,42 +1818,7 @@ export default function Payments() {
                                                         variant="ghost"
                                                         onClick={(e) => {
                                                           e.stopPropagation();
-                                                          const url = new URL(`/payments/${payment.id}/print`, window.location.origin).toString();
-                                                          const w = window.open(url, "_blank");
-                                                          if (!w) {
-                                                            toast({
-                                                              title: "Popup blocked",
-                                                              description: "Please allow popups to print the payment statement.",
-                                                              variant: "destructive",
-                                                            });
-                                                            return;
-                                                          }
-
-                                                          const triggerPrint = () => {
-                                                            try {
-                                                              w.focus();
-                                                              w.print();
-                                                            } catch (error) {
-                                                              console.error("Print failed", error);
-                                                            }
-                                                          };
-
-                                                          const timer = window.setInterval(() => {
-                                                            if (w.closed) {
-                                                              window.clearInterval(timer);
-                                                              return;
-                                                            }
-                                                            const ready = w.document?.readyState === "complete";
-                                                            if (ready) {
-                                                              window.clearInterval(timer);
-                                                              triggerPrint();
-                                                            }
-                                                          }, 300);
-
-                                                          w.onload = () => {
-                                                            window.clearInterval(timer);
-                                                            triggerPrint();
-                                                          };
+                                                          printPaymentStatement(payment);
                                                         }}
                                                       >
                                                         Print

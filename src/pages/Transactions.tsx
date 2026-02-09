@@ -179,11 +179,12 @@ export default function Transactions() {
         opening: typeof data.opening === "number" ? data.opening : parseFloat(data.opening) || 0,
       } as BankAccount;
     });
-    // Filter out ABC BANK and test banks
+    // Filter out ABC BANK, test banks, and CASH accounts
     const filteredList = list.filter((b) => {
       const name = (b.accountName || "").toUpperCase().trim();
-      return name && name !== "ABC BANK" && name !== "ABC" && name !== "TEST BANK" && name !== "TEST";
+      return name && name !== "ABC BANK" && name !== "ABC" && name !== "TEST BANK" && name !== "TEST" && name !== "CASH" && !name.includes("CASH");
     });
+    console.log("Bank accounts loaded:", filteredList);
     setBankAccounts(filteredList);
   };
 
@@ -221,6 +222,7 @@ export default function Transactions() {
       }
     }
     
+    console.log("Cash accounts loaded:", list);
     setCashAccounts(list);
   };
 
@@ -275,7 +277,13 @@ export default function Transactions() {
 
     setIsLoading(true);
     try {
-      await Promise.all([fetchBankAccounts(), fetchCashAccounts(), fetchTransactions()]);
+      console.log("Starting fetchAll...");
+      // Fetch accounts first
+      await fetchBankAccounts();
+      await fetchCashAccounts();
+      // Then fetch transactions
+      await fetchTransactions();
+      console.log("fetchAll complete");
     } catch (error) {
       console.error("Error fetching transactions", error);
       toast({

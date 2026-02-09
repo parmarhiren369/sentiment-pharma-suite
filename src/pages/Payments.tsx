@@ -30,6 +30,7 @@ import {
   Filter,
   HandCoins,
   Plus,
+  Printer,
   RefreshCw,
   Search,
   Users,
@@ -684,25 +685,19 @@ export default function Payments() {
   };
 
 
-  const [printPayment, setPrintPayment] = useState<PaymentRecord | null>(null);
+  const [printParty, setPrintParty] = useState<(typeof partySummaries)[number] | null>(null);
 
   useEffect(() => {
-    const handleAfterPrint = () => setPrintPayment(null);
+    const handleAfterPrint = () => setPrintParty(null);
     window.addEventListener("afterprint", handleAfterPrint);
     return () => window.removeEventListener("afterprint", handleAfterPrint);
   }, []);
 
-  const renderPaymentStatement = (payment: PaymentRecord) => {
-    const partyLabel =
-      payment.partyType === "supplier"
-        ? "Supplier"
-        : payment.partyType === "customer"
-          ? "Customer"
-          : "Party";
-    const accountName = payment.bankAccountName || payment.cashAccountName || "—";
-    const methodLabel = payment.method || "—";
-    const referenceLabel = payment.reference || "—";
-    const paymentAmount = Number(payment.amount) || 0;
+  const renderPartyStatement = (summary: (typeof partySummaries)[number]) => {
+    const partyLabel = activePartyType === "customer" ? "Customer" : "Supplier";
+    const amountDue = summary.balance;
+    const opening = summary.opening;
+    const now = new Date();
 
     return (
       <div className="p-6 text-black">
@@ -713,7 +708,7 @@ export default function Payments() {
           <div className="text-right">
             <div className="text-sm font-semibold">Statement</div>
             <div className="border border-black px-3 py-1 text-xs font-semibold inline-block">
-              {formatDate(payment.date)}
+              {formatDate(now.toISOString())}
             </div>
           </div>
         </div>
@@ -721,7 +716,7 @@ export default function Payments() {
         <div className="mt-3 border border-black">
           <div className="p-3 text-xs">
             <div className="font-semibold">To</div>
-            <div className="mt-1 font-bold uppercase">{payment.partyName || "—"}</div>
+            <div className="mt-1 font-bold uppercase">{summary.name}</div>
             <div className="text-[10px] text-muted-foreground">{partyLabel}</div>
           </div>
         </div>
@@ -729,22 +724,12 @@ export default function Payments() {
         <div className="mt-3 border border-black">
           <div className="grid grid-cols-2 text-[11px]">
             <div className="p-2 border-r border-black">
-              <div className="text-muted-foreground">Payment Method</div>
-              <div className="font-semibold text-xs">{methodLabel}</div>
+              <div className="text-muted-foreground">Amount Due</div>
+              <div className="font-semibold text-xs">{rupees(amountDue)}</div>
             </div>
             <div className="p-2">
-              <div className="text-muted-foreground">Reference</div>
-              <div className="font-semibold text-xs">{referenceLabel}</div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 text-[11px] border-t border-black">
-            <div className="p-2 border-r border-black">
-              <div className="text-muted-foreground">Account</div>
-              <div className="font-semibold text-xs">{accountName}</div>
-            </div>
-            <div className="p-2">
-              <div className="text-muted-foreground">Status</div>
-              <div className="font-semibold text-xs">{payment.status}</div>
+              <div className="text-muted-foreground">Amount Enc</div>
+              <div className="font-semibold text-xs">{rupees(amountDue)}</div>
             </div>
           </div>
         </div>
@@ -756,17 +741,11 @@ export default function Payments() {
             <div className="p-2 border-r border-black text-right">Amount</div>
             <div className="p-2 text-right">Balance</div>
           </div>
-          <div className="grid grid-cols-4 text-xs border-b border-black">
-            <div className="p-2 border-r border-black">{formatDate(payment.date)}</div>
-            <div className="p-2 border-r border-black">Opening Balance</div>
-            <div className="p-2 border-r border-black text-right">{rupees(0)}</div>
-            <div className="p-2 text-right">{rupees(0)}</div>
-          </div>
           <div className="grid grid-cols-4 text-xs">
-            <div className="p-2 border-r border-black">{formatDate(payment.date)}</div>
-            <div className="p-2 border-r border-black">Payment {methodLabel !== "—" ? `(${methodLabel})` : ""}</div>
-            <div className="p-2 border-r border-black text-right">{rupees(paymentAmount)}</div>
-            <div className="p-2 text-right">{rupees(paymentAmount)}</div>
+            <div className="p-2 border-r border-black">{formatDate(now.toISOString())}</div>
+            <div className="p-2 border-r border-black">Opening Balance</div>
+            <div className="p-2 border-r border-black text-right">{rupees(opening)}</div>
+            <div className="p-2 text-right">{rupees(opening)}</div>
           </div>
         </div>
 
@@ -785,12 +764,12 @@ export default function Payments() {
             <div className="p-2 border-r border-black text-right">{rupees(0)}</div>
             <div className="p-2 border-r border-black text-right">{rupees(0)}</div>
             <div className="p-2 border-r border-black text-right">{rupees(0)}</div>
-            <div className="p-2 text-right font-semibold">{rupees(paymentAmount)}</div>
+            <div className="p-2 text-right font-semibold">{rupees(amountDue)}</div>
           </div>
         </div>
 
         <div className="mt-4 text-[10px] text-muted-foreground text-center">
-          Generated on {new Date().toLocaleString("en-IN")}
+          Generated on {now.toLocaleString("en-IN")}
         </div>
       </div>
     );
@@ -1251,7 +1230,7 @@ export default function Payments() {
       `}</style>
 
       <div className="print-only">
-        {printPayment ? renderPaymentStatement(printPayment) : null}
+        {printParty ? renderPartyStatement(printParty) : null}
       </div>
 
       <div className="no-print">
@@ -1471,6 +1450,19 @@ export default function Payments() {
                   </div>
 
                   <div className="flex items-center gap-2 justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        flushSync(() => setPrintParty(p));
+                        window.print();
+                      }}
+                    >
+                      <Printer className="h-4 w-4" />
+                      Print
+                    </Button>
                     <Button
                       type="button"
                       className="gap-2"

@@ -479,7 +479,11 @@ export default function Accounting() {
                   const balClass = bal < 0 ? "text-destructive" : "text-success";
                   const balText = `${bal < 0 ? "-" : ""}${rupees(Math.abs(bal))}`;
                   return (
-                    <div key={b.id} className="rounded-xl border border-border bg-background p-4">
+                    <div 
+                      key={b.id} 
+                      className="rounded-xl border border-border bg-background p-4 cursor-pointer hover:shadow-lg transition-all hover:scale-105"
+                      onClick={() => window.location.href = `/bank-book?bankId=${b.id}&bankName=${encodeURIComponent(b.accountName)}`}
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="text-sm font-semibold tracking-wide text-foreground uppercase truncate">

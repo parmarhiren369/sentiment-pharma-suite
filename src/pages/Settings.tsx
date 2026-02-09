@@ -84,6 +84,15 @@ export default function Settings() {
         "batches",
         "itemNameSuggestions",
         "doctors",
+        "transactions",
+        "bankAccounts",
+        "cashAccounts",
+        "accountingTransactions",
+        "invoices",
+        "quotations",
+        "proformaInvoices",
+        "payments",
+        "debitCreditNotes",
       ];
 
       for (const collectionName of collectionsToDelete) {
@@ -422,6 +431,18 @@ export default function Settings() {
                       </li>
                       <li className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-destructive"></span>
+                        All transactions and accounting data
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-destructive"></span>
+                        All bank and cash accounts
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-destructive"></span>
+                        All invoices, quotations, and payments
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-destructive"></span>
                         All item name suggestions
                       </li>
                     </ul>
@@ -555,6 +576,8 @@ export default function Settings() {
                 <li>• All inventory data</li>
                 <li>• All purchases, suppliers, items, and customers</li>
                 <li>• All doctors and patient records</li>
+                <li>• All transactions, bank accounts, and cash accounts</li>
+                <li>• All invoices, quotations, payments, and debit/credit notes</li>
               </ul>
               <p className="mt-3 font-semibold text-destructive">
                 This action cannot be undone!

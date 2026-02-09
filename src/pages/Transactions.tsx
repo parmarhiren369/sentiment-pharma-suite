@@ -379,27 +379,54 @@ export default function Transactions() {
         {/* Bank and Cash Book Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Bank Book Card */}
-          <Card 
-            className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white cursor-pointer hover:shadow-lg transition-shadow"
-            onClick={() => navigate("/bank-book")}
-          >
+          <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white">
             <div className="flex items-center gap-3 mb-4">
               <div className="h-12 w-12 rounded-lg bg-white/20 flex items-center justify-center">
                 <BookOpen className="h-6 w-6" />
               </div>
               <div>
-                <h3 className="text-xl font-bold">Bank Book</h3>
-                <p className="text-sm text-blue-100">Manage bank accounts</p>
+                <h3 className="text-xl font-bold">Bank Accounts</h3>
+                <p className="text-sm text-blue-100">Click on any bank to view details</p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4 mt-6">
-              <div className="bg-white/10 rounded-lg p-3">
-                <div className="text-sm text-blue-100">Total Accounts</div>
-                <div className="text-2xl font-bold mt-1">{stats.bankAccountsCount}</div>
-              </div>
-              <div className="bg-white/10 rounded-lg p-3">
-                <div className="text-sm text-blue-100">Total Balance</div>
-                <div className="text-2xl font-bold mt-1">{money(stats.totalBankBalance)}</div>
+            <div className="grid grid-cols-1 gap-3 mt-4">
+              {bankAccounts.length === 0 ? (
+                <div className="bg-white/10 rounded-lg p-4 text-center text-sm">
+                  No bank accounts found
+                </div>
+              ) : (
+                bankAccounts.map((bank) => (
+                  <div
+                    key={bank.id}
+                    className="bg-white/10 rounded-lg p-3 cursor-pointer hover:bg-white/20 transition-colors"
+                    onClick={() => navigate(`/bank-book?bankId=${bank.id}&bankName=${encodeURIComponent(bank.accountName)}`)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="font-semibold">{bank.accountName}</div>
+                        {bank.accountNumber && (
+                          <div className="text-xs text-blue-100 mt-0.5">
+                            A/C: {bank.accountNumber}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-right ml-3">
+                        <div className="text-lg font-bold">{money(bank.balance)}</div>
+                        <div className="text-xs text-blue-100">Balance</div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div className="mt-2 pt-3 border-t border-white/20">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Total Accounts</span>
+                  <span className="text-xl font-bold">{stats.bankAccountsCount}</span>
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-sm">Total Balance</span>
+                  <span className="text-xl font-bold">{money(stats.totalBankBalance)}</span>
+                </div>
               </div>
             </div>
           </Card>

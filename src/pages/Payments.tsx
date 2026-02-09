@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
@@ -203,6 +204,15 @@ export default function Payments() {
 
   const rupees = (n: number): string => `${CURRENCY}${amountText(n)}`;
   const money = (n: number): string => rupees(n);
+
+  const formatDate = (value?: string): string => {
+    if (!value) return "—";
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return value;
+    const dd = `${dt.getDate()}`.padStart(2, "0");
+    const mm = `${dt.getMonth() + 1}`.padStart(2, "0");
+    return `${dd}/${mm}/${dt.getFullYear()}`;
+  };
 
   const isOverdueInvoice = (inv: InvoiceRecord): boolean => {
     if ((inv.status || "").toLowerCase() === "paid") return false;
@@ -744,15 +754,6 @@ export default function Payments() {
           ? "Customer"
           : "Party";
 
-    const formatDate = (value?: string) => {
-      if (!value) return "—";
-      const dt = new Date(value);
-      if (Number.isNaN(dt.getTime())) return value;
-      const dd = `${dt.getDate()}`.padStart(2, "0");
-      const mm = `${dt.getMonth() + 1}`.padStart(2, "0");
-      return `${dd}/${mm}/${dt.getFullYear()}`;
-    };
-
     const accountName = payment.bankAccountName || payment.cashAccountName || "—";
     const methodLabel = payment.method || "—";
     const referenceLabel = payment.reference || "—";
@@ -909,6 +910,118 @@ export default function Payments() {
       iframe.onload = () => triggerPrint();
       setTimeout(() => triggerPrint(), 500);
     }
+  };
+
+  const [printPayment, setPrintPayment] = useState<PaymentRecord | null>(null);
+
+  useEffect(() => {
+    const handleAfterPrint = () => setPrintPayment(null);
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => window.removeEventListener("afterprint", handleAfterPrint);
+  }, []);
+
+  const renderPaymentStatement = (payment: PaymentRecord) => {
+    const partyLabel =
+      payment.partyType === "supplier"
+        ? "Supplier"
+        : payment.partyType === "customer"
+          ? "Customer"
+          : "Party";
+    const accountName = payment.bankAccountName || payment.cashAccountName || "—";
+    const methodLabel = payment.method || "—";
+    const referenceLabel = payment.reference || "—";
+    const paymentAmount = Number(payment.amount) || 0;
+
+    return (
+      <div className="p-6 text-black">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="text-lg font-bold uppercase">Sentiment Pharma</div>
+          </div>
+          <div className="text-right">
+            <div className="text-sm font-semibold">Statement</div>
+            <div className="border border-black px-3 py-1 text-xs font-semibold inline-block">
+              {formatDate(payment.date)}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 border border-black">
+          <div className="p-3 text-xs">
+            <div className="font-semibold">To</div>
+            <div className="mt-1 font-bold uppercase">{payment.partyName || "—"}</div>
+            <div className="text-[10px] text-muted-foreground">{partyLabel}</div>
+          </div>
+        </div>
+
+        <div className="mt-3 border border-black">
+          <div className="grid grid-cols-2 text-[11px]">
+            <div className="p-2 border-r border-black">
+              <div className="text-muted-foreground">Payment Method</div>
+              <div className="font-semibold text-xs">{methodLabel}</div>
+            </div>
+            <div className="p-2">
+              <div className="text-muted-foreground">Reference</div>
+              <div className="font-semibold text-xs">{referenceLabel}</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 text-[11px] border-t border-black">
+            <div className="p-2 border-r border-black">
+              <div className="text-muted-foreground">Account</div>
+              <div className="font-semibold text-xs">{accountName}</div>
+            </div>
+            <div className="p-2">
+              <div className="text-muted-foreground">Status</div>
+              <div className="font-semibold text-xs">{payment.status}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 border border-black">
+          <div className="grid grid-cols-4 text-[11px] font-semibold bg-muted/20 border-b border-black">
+            <div className="p-2 border-r border-black">Date</div>
+            <div className="p-2 border-r border-black">Transaction</div>
+            <div className="p-2 border-r border-black text-right">Amount</div>
+            <div className="p-2 text-right">Balance</div>
+          </div>
+          <div className="grid grid-cols-4 text-xs border-b border-black">
+            <div className="p-2 border-r border-black">{formatDate(payment.date)}</div>
+            <div className="p-2 border-r border-black">Opening Balance</div>
+            <div className="p-2 border-r border-black text-right">{rupees(0)}</div>
+            <div className="p-2 text-right">{rupees(0)}</div>
+          </div>
+          <div className="grid grid-cols-4 text-xs">
+            <div className="p-2 border-r border-black">{formatDate(payment.date)}</div>
+            <div className="p-2 border-r border-black">Payment {methodLabel !== "—" ? `(${methodLabel})` : ""}</div>
+            <div className="p-2 border-r border-black text-right">{rupees(paymentAmount)}</div>
+            <div className="p-2 text-right">{rupees(paymentAmount)}</div>
+          </div>
+        </div>
+
+        <div className="mt-3 border border-black">
+          <div className="grid grid-cols-6 text-[10px] font-semibold bg-muted/20 border-b border-black">
+            <div className="p-2 border-r border-black">Current</div>
+            <div className="p-2 border-r border-black">1-30 Days</div>
+            <div className="p-2 border-r border-black">31-60 Days</div>
+            <div className="p-2 border-r border-black">61-90 Days</div>
+            <div className="p-2 border-r border-black">90+ Days</div>
+            <div className="p-2 text-right">Amount Due</div>
+          </div>
+          <div className="grid grid-cols-6 text-xs">
+            <div className="p-2 border-r border-black text-right">{rupees(0)}</div>
+            <div className="p-2 border-r border-black text-right">{rupees(0)}</div>
+            <div className="p-2 border-r border-black text-right">{rupees(0)}</div>
+            <div className="p-2 border-r border-black text-right">{rupees(0)}</div>
+            <div className="p-2 border-r border-black text-right">{rupees(0)}</div>
+            <div className="p-2 text-right font-semibold">{rupees(paymentAmount)}</div>
+          </div>
+        </div>
+
+        <div className="mt-4 text-[10px] text-muted-foreground text-center">
+          Generated on {new Date().toLocaleString("en-IN")}
+        </div>
+      </div>
+    );
   };
 
   const openEdit = (row: PaymentRecord) => {
@@ -1357,9 +1470,22 @@ export default function Payments() {
 
   return (
     <>
-      <AppHeader title="Payments" subtitle="Track payments received and paid" />
+      <style>{`
+        .print-only { display: none; }
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+        }
+      `}</style>
 
-      <div className="flex-1 overflow-auto p-6 space-y-6">
+      <div className="print-only">
+        {printPayment ? renderPaymentStatement(printPayment) : null}
+      </div>
+
+      <div className="no-print">
+        <AppHeader title="Payments" subtitle="Track payments received and paid" />
+
+        <div className="flex-1 overflow-auto p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             title="Total outstanding"
@@ -1839,7 +1965,8 @@ export default function Payments() {
                                                         variant="ghost"
                                                         onClick={(e) => {
                                                           e.stopPropagation();
-                                                          printPaymentStatement(payment);
+                                                          flushSync(() => setPrintPayment(payment));
+                                                          window.print();
                                                         }}
                                                       >
                                                         Print
@@ -1885,8 +2012,8 @@ export default function Payments() {
         </div>
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Payment" : "Add Payment"}</DialogTitle>
           </DialogHeader>
@@ -2135,8 +2262,9 @@ export default function Payments() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      </div>
     </>
   );
 }

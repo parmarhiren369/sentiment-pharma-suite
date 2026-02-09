@@ -7,6 +7,8 @@ import { doc, getDoc } from "firebase/firestore";
 import { ArrowLeft, Printer } from "lucide-react";
 
 const COMPANY_NAME = "Sentiment Pharma";
+const COMPANY_ADDRESS = "";
+const COMPANY_TAX = "";
 const CURRENCY = "₹";
 
 type PaymentDoc = {
@@ -114,20 +116,25 @@ export default function PaymentPrint() {
           </Button>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between">
           <div>
             <div className="text-xl font-bold uppercase">{COMPANY_NAME}</div>
-            <div className="text-sm text-muted-foreground">Payment Statement</div>
+            {COMPANY_ADDRESS ? (
+              <div className="text-xs text-muted-foreground whitespace-pre-line">{COMPANY_ADDRESS}</div>
+            ) : null}
+            {COMPANY_TAX ? (
+              <div className="text-xs text-muted-foreground">{COMPANY_TAX}</div>
+            ) : null}
           </div>
           <div className="text-right">
-            <div className="text-sm">Date</div>
+            <div className="text-sm font-semibold">Statement</div>
             <div className="border px-3 py-1 text-sm font-semibold inline-block">
               {formatDate(payment.date)}
             </div>
           </div>
         </div>
 
-        <div className="mt-6 border">
+        <div className="mt-4 border">
           <div className="p-3 text-sm">
             <div className="font-semibold">To</div>
             <div className="mt-1 font-bold uppercase">{payment.partyName || "—"}</div>
@@ -135,32 +142,32 @@ export default function PaymentPrint() {
           </div>
         </div>
 
-        <div className="mt-4 border">
-          <div className="grid grid-cols-2 text-sm">
-            <div className="p-3 border-r">
+        <div className="mt-3 border">
+          <div className="grid grid-cols-2 text-xs">
+            <div className="p-2 border-r">
               <div className="text-muted-foreground">Payment Method</div>
-              <div className="font-semibold">{payment.method || "—"}</div>
+              <div className="font-semibold text-sm">{payment.method || "—"}</div>
             </div>
-            <div className="p-3">
+            <div className="p-2">
               <div className="text-muted-foreground">Reference</div>
-              <div className="font-semibold">{payment.reference || "—"}</div>
+              <div className="font-semibold text-sm">{payment.reference || "—"}</div>
             </div>
           </div>
-          <div className="grid grid-cols-2 text-sm border-t">
-            <div className="p-3 border-r">
+          <div className="grid grid-cols-2 text-xs border-t">
+            <div className="p-2 border-r">
               <div className="text-muted-foreground">Account</div>
-              <div className="font-semibold">
+              <div className="font-semibold text-sm">
                 {payment.bankAccountName || payment.cashAccountName || "—"}
               </div>
             </div>
-            <div className="p-3">
+            <div className="p-2">
               <div className="text-muted-foreground">Status</div>
-              <div className="font-semibold">{payment.status || "—"}</div>
+              <div className="font-semibold text-sm">{payment.status || "—"}</div>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 border">
+        <div className="mt-4 border">
           <div className="grid grid-cols-4 text-xs font-semibold bg-muted/20 border-b">
             <div className="p-2 border-r">Date</div>
             <div className="p-2 border-r">Transaction</div>
@@ -178,6 +185,25 @@ export default function PaymentPrint() {
             <div className="p-2 border-r">Payment {payment.method ? `(${payment.method})` : ""}</div>
             <div className="p-2 border-r text-right">{formatMoney(payment.amount)}</div>
             <div className="p-2 text-right">{formatMoney(payment.amount)}</div>
+          </div>
+        </div>
+
+        <div className="mt-3 border">
+          <div className="grid grid-cols-6 text-[11px] font-semibold bg-muted/20 border-b">
+            <div className="p-2 border-r">Current</div>
+            <div className="p-2 border-r">1-30 Days</div>
+            <div className="p-2 border-r">31-60 Days</div>
+            <div className="p-2 border-r">61-90 Days</div>
+            <div className="p-2 border-r">90+ Days</div>
+            <div className="p-2 text-right">Amount Due</div>
+          </div>
+          <div className="grid grid-cols-6 text-sm">
+            <div className="p-2 border-r text-right">{formatMoney(0)}</div>
+            <div className="p-2 border-r text-right">{formatMoney(0)}</div>
+            <div className="p-2 border-r text-right">{formatMoney(0)}</div>
+            <div className="p-2 border-r text-right">{formatMoney(0)}</div>
+            <div className="p-2 border-r text-right">{formatMoney(0)}</div>
+            <div className="p-2 text-right font-semibold">{formatMoney(payment.amount)}</div>
           </div>
         </div>
 

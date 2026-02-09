@@ -1230,6 +1230,9 @@ export default function Payments() {
         @media print {
           .no-print { display: none !important; }
           .print-only { display: block !important; }
+          body { overflow: hidden !important; }
+          * { scrollbar-width: none; }
+          *::-webkit-scrollbar { width: 0 !important; height: 0 !important; }
         }
       `}</style>
 

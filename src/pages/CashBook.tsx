@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { addDoc, collection, getDocs, orderBy, query, Timestamp } from "firebase/firestore";
 import { ArrowLeft, Download, RefreshCw, Search } from "lucide-react";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
@@ -73,6 +73,29 @@ export default function CashBook() {
         opening: typeof data.opening === "number" ? data.opening : parseFloat(data.opening) || 0,
       } as CashAccount;
     });
+    
+    // If no cash accounts exist, create a default one
+    if (list.length === 0) {
+      try {
+        const defaultCashRef = await addDoc(collection(db, "cashAccounts"), {
+          accountName: "Cash",
+          opening: 0,
+          createdAt: Timestamp.now(),
+        });
+        list.push({
+          id: defaultCashRef.id,
+          accountName: "Cash",
+          opening: 0,
+        });
+        toast({
+          title: "Cash Account Created",
+          description: "Default cash account has been created.",
+        });
+      } catch (error) {
+        console.error("Error creating default cash account", error);
+      }
+    }
+    
     setAccounts(list);
   };
 

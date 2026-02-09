@@ -44,13 +44,13 @@ interface BankAccount {
   id: string;
   accountName: string;
   accountNumber?: string;
-  balance: number;
+  opening: number;
 }
 
 interface CashAccount {
   id: string;
   accountName: string;
-  balance: number;
+  opening: number;
 }
 
 interface TransactionRecord {
@@ -124,8 +124,23 @@ export default function Transactions() {
       .filter((t) => t.type === "Withdrawal" && t.status === "Completed")
       .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-    const totalBankBalance = bankAccounts.reduce((sum, b) => sum + (b.balance || 0), 0);
-    const totalCashBalance = cashAccounts.reduce((sum, c) => sum + (c.balance || 0), 0);
+    // Calculate actual balance for each bank account
+    const totalBankBalance = bankAccounts.reduce((sum, b) => {
+      const accountTxs = transactions.filter(t => t.accountId === b.id && t.status === "Completed");
+      const accountDeposits = accountTxs.filter(t => t.type === "Deposit").reduce((s, t) => s + t.amount, 0);
+      const accountWithdrawals = accountTxs.filter(t => t.type === "Withdrawal").reduce((s, t) => s + t.amount, 0);
+      const accountBalance = (b.opening || 0) + accountDeposits - accountWithdrawals;
+      return sum + accountBalance;
+    }, 0);
+
+    // Calculate actual balance for each cash account
+    const totalCashBalance = cashAccounts.reduce((sum, c) => {
+      const accountTxs = transactions.filter(t => t.accountId === c.id && t.status === "Completed");
+      const accountDeposits = accountTxs.filter(t => t.type === "Deposit").reduce((s, t) => s + t.amount, 0);
+      const accountWithdrawals = accountTxs.filter(t => t.type === "Withdrawal").reduce((s, t) => s + t.amount, 0);
+      const accountBalance = (c.opening || 0) + accountDeposits - accountWithdrawals;
+      return sum + accountBalance;
+    }, 0);
 
     return {
       total: transactions.length,
@@ -153,7 +168,7 @@ export default function Transactions() {
         id: d.id,
         accountName: (data.accountName || data.name || "").toString(),
         accountNumber: (data.accountNumber || "").toString() || undefined,
-        balance: typeof data.balance === "number" ? data.balance : 0,
+        opening: typeof data.opening === "number" ? data.opening : parseFloat(data.opening) || 0,
       } as BankAccount;
     });
     // Filter out ABC BANK and test banks
@@ -172,17 +187,30 @@ export default function Transactions() {
       return {
         id: d.id,
         accountName: (data.accountName || data.name || "Cash").toString(),
-        balance: typeof data.balance === "number" ? data.balance : 0,
+        opening: typeof data.opening === "number" ? data.opening : parseFloat(data.opening) || 0,
       } as CashAccount;
     });
     
-    // If no cash accounts exist, create a default one
-    if (list.length === 0) {
-      list.push({
-        id: "default-cash",
-        accountName: "Cash",
-        balance: 0,
-      });
+    // If no cash accounts exist, create a default one in database
+    if (list.length === 0 && db) {
+      try {
+        const defaultCashRef = await addDoc(collection(db, "cashAccounts"), {
+          accountName: "Cash",
+          opening: 0,
+          createdAt: Timestamp.now(),
+        });
+        list.push({
+          id: defaultCashRef.id,
+          accountName: "Cash",
+          opening: 0,
+        });
+        toast({
+          title: "Cash Account Created",
+          description: "Default cash account has been created.",
+        });
+      } catch (error) {
+        console.error("Error creating default cash account", error);
+      }
     }
     
     setCashAccounts(list);

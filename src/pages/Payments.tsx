@@ -65,6 +65,8 @@ interface PaymentRecord {
   bankTransferCharge?: number;
   accountingTxId?: string;
   bankChargeTxId?: string;
+  acctAccountingTxId?: string; // ID for accountingTransactions collection entry
+  acctBankChargeTxId?: string; // ID for accountingTransactions collection bank charge entry
   notes?: string;
   status: PaymentStatus;
   createdAt?: Date;
@@ -331,6 +333,8 @@ export default function Payments() {
           typeof data.bankTransferCharge === "number" ? data.bankTransferCharge : parseFloat(data.bankTransferCharge) || 0,
         accountingTxId: (data.accountingTxId || "").toString() || undefined,
         bankChargeTxId: (data.bankChargeTxId || "").toString() || undefined,
+        acctAccountingTxId: (data.acctAccountingTxId || "").toString() || undefined,
+        acctBankChargeTxId: (data.acctBankChargeTxId || "").toString() || undefined,
         notes: (data.notes || "").toString() || undefined,
         status: (data.status || "Completed") as PaymentStatus,
         createdAt: data.createdAt?.toDate?.() || new Date(),
@@ -740,6 +744,12 @@ export default function Payments() {
       if (existing?.bankChargeTxId) {
         await deleteDoc(doc(db, "transactions", existing.bankChargeTxId));
       }
+      if (existing?.acctAccountingTxId) {
+        await deleteDoc(doc(db, "accountingTransactions", existing.acctAccountingTxId));
+      }
+      if (existing?.acctBankChargeTxId) {
+        await deleteDoc(doc(db, "accountingTransactions", existing.acctBankChargeTxId));
+      }
       await deleteDoc(doc(db, "payments", id));
       toast({ title: "Deleted", description: "Payment removed." });
       fetchPayments();
@@ -831,6 +841,8 @@ export default function Payments() {
 
         let nextAccountingTxId = editing.accountingTxId || "";
         let nextBankChargeTxId = editing.bankChargeTxId || "";
+        let nextAcctAccountingTxId = editing.acctAccountingTxId || "";
+        let nextAcctBankChargeTxId = editing.acctBankChargeTxId || "";
 
         if (needsBankTx) {
           if (!nextAccountingTxId) {
@@ -865,9 +877,41 @@ export default function Payments() {
               updatedAt: now,
             });
           }
+
+          // Handle accountingTransactions collection entry
+          if (!nextAcctAccountingTxId) {
+            const acctTxRef = doc(collection(db, "accountingTransactions"));
+            nextAcctAccountingTxId = acctTxRef.id;
+            batch.set(acctTxRef, {
+              date: payload.date,
+              description: `Payment ${payload.direction === "In" ? "Received" : "Paid"} - ${payload.partyName || ""}`,
+              type: payload.direction === "In" ? "Deposit" : "Withdrawal",
+              amount: payload.amount,
+              accountId: payload.bankAccountId,
+              accountName: payload.bankAccountName,
+              reference: payload.reference || "",
+              status: "Completed",
+              createdAt: now,
+            });
+          } else {
+            batch.update(doc(db, "accountingTransactions", nextAcctAccountingTxId), {
+              date: payload.date,
+              description: `Payment ${payload.direction === "In" ? "Received" : "Paid"} - ${payload.partyName || ""}`,
+              type: payload.direction === "In" ? "Deposit" : "Withdrawal",
+              amount: payload.amount,
+              accountId: payload.bankAccountId,
+              accountName: payload.bankAccountName,
+              reference: payload.reference || "",
+              status: "Completed",
+            });
+          }
         } else if (nextAccountingTxId) {
           batch.delete(doc(db, "transactions", nextAccountingTxId));
           nextAccountingTxId = "";
+          if (nextAcctAccountingTxId) {
+            batch.delete(doc(db, "accountingTransactions", nextAcctAccountingTxId));
+            nextAcctAccountingTxId = "";
+          }
         }
 
         if (needsBankChargeTx) {
@@ -903,15 +947,49 @@ export default function Payments() {
               updatedAt: now,
             });
           }
+
+          // Handle accountingTransactions collection entry for bank charges
+          if (!nextAcctBankChargeTxId) {
+            const acctChargeRef = doc(collection(db, "accountingTransactions"));
+            nextAcctBankChargeTxId = acctChargeRef.id;
+            batch.set(acctChargeRef, {
+              date: payload.date,
+              description: `Bank charges - ${payload.partyName || ""}`,
+              type: "Withdrawal",
+              amount: payload.bankTransferCharge || 0,
+              accountId: payload.bankAccountId,
+              accountName: payload.bankAccountName,
+              reference: payload.reference || "",
+              status: "Completed",
+              createdAt: now,
+            });
+          } else {
+            batch.update(doc(db, "accountingTransactions", nextAcctBankChargeTxId), {
+              date: payload.date,
+              description: `Bank charges - ${payload.partyName || ""}`,
+              type: "Withdrawal",
+              amount: payload.bankTransferCharge || 0,
+              accountId: payload.bankAccountId,
+              accountName: payload.bankAccountName,
+              reference: payload.reference || "",
+              status: "Completed",
+            });
+          }
         } else if (nextBankChargeTxId) {
           batch.delete(doc(db, "transactions", nextBankChargeTxId));
           nextBankChargeTxId = "";
+          if (nextAcctBankChargeTxId) {
+            batch.delete(doc(db, "accountingTransactions", nextAcctBankChargeTxId));
+            nextAcctBankChargeTxId = "";
+          }
         }
 
         batch.update(paymentRef, {
           ...payload,
           accountingTxId: nextAccountingTxId,
           bankChargeTxId: nextBankChargeTxId,
+          acctAccountingTxId: nextAcctAccountingTxId,
+          acctBankChargeTxId: nextAcctBankChargeTxId,
         });
 
         await batch.commit();
@@ -920,6 +998,8 @@ export default function Payments() {
         const paymentRef = doc(collection(db, "payments"));
         let accountingTxId = "";
         let bankChargeTxId = "";
+        let acctAccountingTxId = "";
+        let acctBankChargeTxId = "";
 
         if (needsBankTx) {
           const txRef = doc(collection(db, "transactions"));
@@ -937,6 +1017,21 @@ export default function Payments() {
             reference: payload.reference || "",
             createdAt: now,
             updatedAt: now,
+          });
+
+          // Also create entry in accountingTransactions for bank book tracking
+          const acctTxRef = doc(collection(db, "accountingTransactions"));
+          acctAccountingTxId = acctTxRef.id;
+          batch.set(acctTxRef, {
+            date: payload.date,
+            description: `Payment ${payload.direction === "In" ? "Received" : "Paid"} - ${payload.partyName || ""}`,
+            type: payload.direction === "In" ? "Deposit" : "Withdrawal",
+            amount: payload.amount,
+            accountId: payload.bankAccountId,
+            accountName: payload.bankAccountName,
+            reference: payload.reference || "",
+            status: "Completed",
+            createdAt: now,
           });
         }
 
@@ -957,12 +1052,29 @@ export default function Payments() {
             createdAt: now,
             updatedAt: now,
           });
+
+          // Also create entry in accountingTransactions for bank book tracking
+          const acctChargeRef = doc(collection(db, "accountingTransactions"));
+          acctBankChargeTxId = acctChargeRef.id;
+          batch.set(acctChargeRef, {
+            date: payload.date,
+            description: `Bank charges - ${payload.partyName || ""}`,
+            type: "Withdrawal",
+            amount: payload.bankTransferCharge || 0,
+            accountId: payload.bankAccountId,
+            accountName: payload.bankAccountName,
+            reference: payload.reference || "",
+            status: "Completed",
+            createdAt: now,
+          });
         }
 
         batch.set(paymentRef, {
           ...payload,
           accountingTxId,
           bankChargeTxId,
+          acctAccountingTxId,
+          acctBankChargeTxId,
           createdAt: now,
         });
 

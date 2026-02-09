@@ -30,6 +30,8 @@ import DebitCreditNotes from "./pages/DebitCreditNotes";
 import DebitCreditNoteNew from "./pages/DebitCreditNoteNew";
 import BankBook from "./pages/BankBook";
 import CashBook from "./pages/CashBook";
+import BankDetails from "./pages/BankDetails";
+import CashDetails from "./pages/CashDetails";
 import Quotations from "./pages/Quotations";
 import QuotationNew from "./pages/QuotationNew";
 import ProformaInvoices from "./pages/ProformaInvoices";
@@ -82,7 +84,9 @@ const App = () => {
                   <Route path="/accounting" element={<Accounting />} />
                   <Route path="/transactions" element={<Transactions />} />
                   <Route path="/bank-book" element={<BankBook />} />
+                  <Route path="/bank-details" element={<BankDetails />} />
                   <Route path="/cash-book" element={<CashBook />} />
+                  <Route path="/cash-details" element={<CashDetails />} />
                   <Route path="/payments" element={<Payments />} />
                   <Route path="/invoices" element={<Invoices />} />
                   <Route path="/invoices/new" element={<InvoiceNew />} />

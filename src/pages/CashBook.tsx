@@ -298,7 +298,11 @@ export default function CashBook() {
                 ) : (
                   <>
                     {filtered.map((row, idx) => (
-                      <TableRow key={row.id}>
+                      <TableRow 
+                        key={row.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/cash-details?cashId=${row.id}&cashName=${encodeURIComponent(row.accountName)}`)}
+                      >
                         <TableCell>{idx + 1}</TableCell>
                         <TableCell className="font-medium">{row.accountName}</TableCell>
                         <TableCell className="text-right">

@@ -340,7 +340,11 @@ export default function BankBook() {
                 ) : (
                   <>
                     {filtered.map((row, idx) => (
-                      <TableRow key={row.id}>
+                      <TableRow 
+                        key={row.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/bank-details?bankId=${row.id}&bankName=${encodeURIComponent(row.accountName)}`)}
+                      >
                         <TableCell>{idx + 1}</TableCell>
                         <TableCell className="font-medium">
                           {row.accountName}

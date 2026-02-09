@@ -695,7 +695,7 @@ export default function Payments() {
 
   const renderPartyStatement = (summary: (typeof partySummaries)[number]) => {
     const partyLabel = activePartyType === "customer" ? "Customer" : "Supplier";
-    const amountDue = summary.balance;
+    const amountDue = summary.outstanding;
     const opening = summary.opening;
     const now = new Date();
 
@@ -703,9 +703,13 @@ export default function Payments() {
       <div className="p-6 text-black">
         <div className="flex items-start justify-between">
           <div>
+            <div className="text-[11px] text-muted-foreground">
+              {now.toLocaleString("en-IN")}
+            </div>
             <div className="text-lg font-bold uppercase">Sentiment Pharma</div>
           </div>
           <div className="text-right">
+            <div className="text-[11px] font-semibold">Statement - {summary.name}</div>
             <div className="text-sm font-semibold">Statement</div>
             <div className="border border-black px-3 py-1 text-xs font-semibold inline-block">
               {formatDate(now.toISOString())}

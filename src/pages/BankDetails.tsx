@@ -122,47 +122,77 @@ export default function BankDetails() {
   }, [bankId]);
 
   const monthSummaries = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    
+    // Initialize all 12 months
     const monthMap = new Map<string, MonthSummary>();
+    for (let month = 1; month <= 12; month++) {
+      const key = `${currentYear}-${month.toString().padStart(2, "0")}`;
+      monthMap.set(key, {
+        month: key,
+        year: currentYear,
+        monthName: `${monthNames[month - 1]} ${currentYear}`,
+        opening: opening,
+        deposits: 0,
+        withdrawals: 0,
+        closing: opening,
+        transactionCount: 0,
+      });
+    }
+
+    // Sort transactions chronologically
     const sortedTx = [...transactions].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 
     let runningBalance = opening;
 
+    // Process transactions and update month summaries
     sortedTx.forEach((tx) => {
       if (!tx.date) return;
       const date = new Date(tx.date);
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
+      
+      // Only process transactions from current year
+      if (year !== currentYear) return;
+      
       const key = `${year}-${month.toString().padStart(2, "0")}`;
-      const monthName = date.toLocaleString("en-US", { month: "long", year: "numeric" });
+      
+      if (monthMap.has(key)) {
+        const summary = monthMap.get(key)!;
+        
+        // Set opening balance for this month if first transaction
+        if (summary.transactionCount === 0) {
+          summary.opening = runningBalance;
+        }
+        
+        summary.transactionCount++;
 
-      if (!monthMap.has(key)) {
-        monthMap.set(key, {
-          month: key,
-          year,
-          monthName,
-          opening: runningBalance,
-          deposits: 0,
-          withdrawals: 0,
-          closing: runningBalance,
-          transactionCount: 0,
-        });
+        if (tx.type === "Deposit") {
+          summary.deposits += tx.amount;
+          runningBalance += tx.amount;
+        } else {
+          summary.withdrawals += tx.amount;
+          runningBalance -= tx.amount;
+        }
+
+        summary.closing = runningBalance;
       }
-
-      const summary = monthMap.get(key)!;
-      summary.transactionCount++;
-
-      if (tx.type === "Deposit") {
-        summary.deposits += tx.amount;
-        runningBalance += tx.amount;
-      } else {
-        summary.withdrawals += tx.amount;
-        runningBalance -= tx.amount;
-      }
-
-      summary.closing = runningBalance;
     });
 
-    return Array.from(monthMap.values()).reverse();
+    // Update closing/opening balances for months without transactions
+    let lastBalance = opening;
+    const allMonths = Array.from(monthMap.values());
+    allMonths.forEach((summary) => {
+      if (summary.transactionCount === 0) {
+        summary.opening = lastBalance;
+        summary.closing = lastBalance;
+      } else {
+        lastBalance = summary.closing;
+      }
+    });
+
+    return allMonths;
   }, [transactions, opening]);
 
   const filteredTransactions = useMemo(() => {

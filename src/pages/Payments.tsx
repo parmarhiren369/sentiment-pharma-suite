@@ -62,6 +62,8 @@ interface PaymentRecord {
   reference: string;
   bankAccountId?: string;
   bankAccountName?: string;
+  cashAccountId?: string;
+  cashAccountName?: string;
   bankTransferCharge?: number;
   accountingTxId?: string;
   bankChargeTxId?: string;
@@ -76,6 +78,11 @@ interface BankAccount {
   id: string;
   accountName: string;
   accountNumber?: string;
+}
+
+interface CashAccount {
+  id: string;
+  accountName: string;
 }
 
 interface PartyOption {
@@ -154,6 +161,7 @@ export default function Payments() {
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [notes, setNotes] = useState<NoteRecord[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [cashAccounts, setCashAccounts] = useState<CashAccount[]>([]);
   const [purchases, setPurchases] = useState<any[]>([]);
 
   const [activePartyType, setActivePartyType] = useState<PartyType>("customer");
@@ -329,6 +337,8 @@ export default function Payments() {
         reference: (data.reference || "").toString(),
         bankAccountId: (data.bankAccountId || "").toString() || undefined,
         bankAccountName: (data.bankAccountName || "").toString() || undefined,
+        cashAccountId: (data.cashAccountId || "").toString() || undefined,
+        cashAccountName: (data.cashAccountName || "").toString() || undefined,
         bankTransferCharge:
           typeof data.bankTransferCharge === "number" ? data.bankTransferCharge : parseFloat(data.bankTransferCharge) || 0,
         accountingTxId: (data.accountingTxId || "").toString() || undefined,
@@ -357,6 +367,21 @@ export default function Payments() {
       })
       .filter((b) => b.accountName);
     setBankAccounts(list);
+  };
+
+  const fetchCashAccounts = async () => {
+    const qy = query(collection(db, "cashAccounts"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(qy);
+    const list = snap.docs
+      .map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          accountName: (data.accountName || data.name || "").toString(),
+        } as CashAccount;
+      })
+      .filter((c) => c.accountName);
+    setCashAccounts(list);
   };
 
   const fetchInvoices = async () => {
@@ -445,7 +470,7 @@ export default function Payments() {
 
     setIsLoading(true);
     try {
-      await Promise.all([fetchParties(), fetchPayments(), fetchInvoices(), fetchNotes(), fetchBankAccounts()]);
+      await Promise.all([fetchParties(), fetchPayments(), fetchInvoices(), fetchNotes(), fetchBankAccounts(), fetchCashAccounts()]);
     } catch (error) {
       console.error("Error fetching payments", error);
       toast({
@@ -802,6 +827,7 @@ export default function Payments() {
 
     const selectedInvoice = formData.invoiceId ? invoices.find((x) => x.id === formData.invoiceId) : undefined;
     const selectedBank = formData.bankAccountId ? bankAccounts.find((b) => b.id === formData.bankAccountId) : undefined;
+    const selectedCash = formData.method === "Cash" && cashAccounts.length > 0 ? cashAccounts[0] : undefined;
 
     const bankTransferCharge = safeNumber(formData.bankTransferCharge);
 
@@ -818,6 +844,8 @@ export default function Payments() {
       reference: formData.reference.trim(),
       bankAccountId: selectedBank?.id || "",
       bankAccountName: selectedBank?.accountName || "",
+      cashAccountId: selectedCash?.id || "",
+      cashAccountName: selectedCash?.accountName || "",
       bankTransferCharge: isBankTransfer ? bankTransferCharge : 0,
       notes: formData.notes.trim(),
       status: formData.status,
@@ -828,6 +856,11 @@ export default function Payments() {
       payload.status === "Completed" &&
       (payload.method === "Bank" || payload.method === "Bank Transfer") &&
       !!payload.bankAccountId;
+
+    const needsCashTx =
+      payload.status === "Completed" &&
+      payload.method === "Cash" &&
+      !!payload.cashAccountId;
 
     const needsBankChargeTx = needsBankTx && (payload.bankTransferCharge || 0) > 0;
 
@@ -912,6 +945,39 @@ export default function Payments() {
             batch.delete(doc(db, "accountingTransactions", nextAcctAccountingTxId));
             nextAcctAccountingTxId = "";
           }
+        }
+
+        if (needsCashTx) {
+          // Handle accountingTransactions collection entry for cash book tracking
+          if (!nextAcctAccountingTxId) {
+            const acctCashTxRef = doc(collection(db, "accountingTransactions"));
+            nextAcctAccountingTxId = acctCashTxRef.id;
+            batch.set(acctCashTxRef, {
+              date: payload.date,
+              description: `Payment ${payload.direction === "In" ? "Received" : "Paid"} - ${payload.partyName || ""}`,
+              type: payload.direction === "In" ? "Deposit" : "Withdrawal",
+              amount: payload.amount,
+              accountId: payload.cashAccountId,
+              accountName: payload.cashAccountName,
+              reference: payload.reference || "",
+              status: "Completed",
+              createdAt: now,
+            });
+          } else {
+            batch.update(doc(db, "accountingTransactions", nextAcctAccountingTxId), {
+              date: payload.date,
+              description: `Payment ${payload.direction === "In" ? "Received" : "Paid"} - ${payload.partyName || ""}`,
+              type: payload.direction === "In" ? "Deposit" : "Withdrawal",
+              amount: payload.amount,
+              accountId: payload.cashAccountId,
+              accountName: payload.cashAccountName,
+              reference: payload.reference || "",
+              status: "Completed",
+            });
+          }
+        } else if (!needsBankTx && nextAcctAccountingTxId) {
+          batch.delete(doc(db, "accountingTransactions", nextAcctAccountingTxId));
+          nextAcctAccountingTxId = "";
         }
 
         if (needsBankChargeTx) {
@@ -1029,6 +1095,23 @@ export default function Payments() {
             amount: payload.amount,
             accountId: payload.bankAccountId,
             accountName: payload.bankAccountName,
+            reference: payload.reference || "",
+            status: "Completed",
+            createdAt: now,
+          });
+        }
+
+        if (needsCashTx) {
+          // Create entry in accountingTransactions for cash book tracking
+          const acctCashTxRef = doc(collection(db, "accountingTransactions"));
+          acctAccountingTxId = acctCashTxRef.id;
+          batch.set(acctCashTxRef, {
+            date: payload.date,
+            description: `Payment ${payload.direction === "In" ? "Received" : "Paid"} - ${payload.partyName || ""}`,
+            type: payload.direction === "In" ? "Deposit" : "Withdrawal",
+            amount: payload.amount,
+            accountId: payload.cashAccountId,
+            accountName: payload.cashAccountName,
             reference: payload.reference || "",
             status: "Completed",
             createdAt: now,

@@ -76,34 +76,68 @@ export default function BankBook() {
         opening: typeof data.opening === "number" ? data.opening : parseFloat(data.opening) || 0,
       } as BankAccount;
     });
-    setAccounts(list);
+    // Filter out ABC BANK and test banks
+    const filteredList = list.filter((b) => {
+      const name = (b.accountName || "").toUpperCase().trim();
+      return name && name !== "ABC BANK" && name !== "ABC" && name !== "TEST BANK" && name !== "TEST";
+    });
+    setAccounts(filteredList);
   };
 
   const fetchTransactions = async () => {
     if (!db) return;
-    const q = query(collection(db, "accountingTransactions"), orderBy("date", "desc"));
-    const snap = await getDocs(q);
-    const list = snap.docs
-      .map((d) => {
-        const data = d.data();
-        return {
-          id: d.id,
-          date: (data.date || "").toString(),
-          description: (data.description || "").toString(),
-          type: (data.type || "Deposit") as "Deposit" | "Withdrawal",
-          amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
-          accountId: (data.accountId || "").toString(),
-          accountName: data.accountName ? data.accountName.toString() : undefined,
-          reference: data.reference ? data.reference.toString() : undefined,
-          status: (data.status || "Completed").toString(),
-          createdAt: data.createdAt?.toDate?.() || new Date(),
-        } as Transaction;
-      })
-      .filter((t) => {
-        // Only include bank account transactions
-        const acc = accounts.find((a) => a.id === t.accountId);
-        return acc !== undefined;
-      });
+    
+    // Fetch from both collections to get all bank transactions
+    const [accountingTxSnap, regularTxSnap] = await Promise.all([
+      getDocs(query(collection(db, "accountingTransactions"), orderBy("date", "desc"))),
+      getDocs(query(collection(db, "transactions"), orderBy("createdAt", "desc")))
+    ]);
+    
+    const accountingTxList = accountingTxSnap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        date: (data.date || "").toString(),
+        description: (data.description || "").toString(),
+        type: (data.type || "Deposit") as "Deposit" | "Withdrawal",
+        amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
+        accountId: (data.accountId || "").toString(),
+        accountName: data.accountName ? data.accountName.toString() : undefined,
+        reference: data.reference ? data.reference.toString() : undefined,
+        status: (data.status || "Completed").toString(),
+        createdAt: data.createdAt?.toDate?.() || new Date(),
+      } as Transaction;
+    });
+    
+    // Convert regular transactions to bank format
+    const regularTxList = regularTxSnap.docs.map((d) => {
+      const data = d.data();
+      const bankAccountId = (data.bankAccountId || "").toString();
+      if (!bankAccountId) return null;
+      
+      return {
+        id: d.id,
+        date: (data.date || "").toString(),
+        description: (data.description || "").toString(),
+        type: (data.type === "Income" || data.type === "Deposit") ? "Deposit" : "Withdrawal" as "Deposit" | "Withdrawal",
+        amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
+        accountId: bankAccountId,
+        accountName: data.bankAccountName ? data.bankAccountName.toString() : undefined,
+        reference: data.reference ? data.reference.toString() : undefined,
+        status: "Completed",
+        createdAt: data.createdAt?.toDate?.() || new Date(),
+      } as Transaction;
+    }).filter(t => t !== null) as Transaction[];
+    
+    // Combine both lists
+    const allTransactions = [...accountingTxList, ...regularTxList];
+    
+    // Filter to only include transactions for valid bank accounts
+    const list = allTransactions.filter((t) => {
+      const acc = accounts.find((a) => a.id === t.accountId);
+      return acc !== undefined;
+    });
+    
     setTransactions(list);
   };
 

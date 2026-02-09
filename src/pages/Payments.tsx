@@ -152,6 +152,7 @@ export default function Payments() {
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [notes, setNotes] = useState<NoteRecord[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [purchases, setPurchases] = useState<any[]>([]);
 
   const [activePartyType, setActivePartyType] = useState<PartyType>("customer");
   const [partySearch, setPartySearch] = useState("");
@@ -355,9 +356,12 @@ export default function Payments() {
   };
 
   const fetchInvoices = async () => {
-    const qy = query(collection(db, "invoices"), orderBy("createdAt", "desc"));
-    const snap = await getDocs(qy);
-    const list = snap.docs
+    const [invoicesSnap, purchasesSnap] = await Promise.all([
+      getDocs(query(collection(db, "invoices"), orderBy("createdAt", "desc"))),
+      getDocs(collection(db, "purchases")),
+    ]);
+    
+    const invoicesList = invoicesSnap.docs
       .map((d) => {
         const data = d.data();
         return {
@@ -374,7 +378,32 @@ export default function Payments() {
         } as InvoiceRecord;
       })
       .filter((x) => x.invoiceNo && x.partyId);
-    setInvoices(list);
+    
+    // Convert purchases to invoice format for suppliers
+    const purchasesList = purchasesSnap.docs
+      .map((d) => {
+        const data = d.data();
+        const supplierId = (data.supplierId || "").toString();
+        const supplierName = (data.supplierName || "").toString();
+        if (!supplierId || !supplierName) return null;
+        
+        return {
+          id: d.id,
+          invoiceNo: (data.invoiceNo || "").toString(),
+          manualInvoiceNo: undefined,
+          partyType: "supplier" as PartyType,
+          partyId: supplierId,
+          partyName: supplierName,
+          issueDate: (data.date || "").toString(),
+          dueDate: undefined,
+          total: typeof data.totalPrice === "number" ? data.totalPrice : parseFloat(data.totalPrice) || 0,
+          status: "Unpaid",
+        } as InvoiceRecord;
+      })
+      .filter((x) => x !== null) as InvoiceRecord[];
+    
+    setPurchases(purchasesSnap.docs.map(d => ({id: d.id, ...d.data()})));
+    setInvoices([...invoicesList, ...purchasesList]);
   };
 
   const fetchNotes = async () => {

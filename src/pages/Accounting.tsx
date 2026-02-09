@@ -138,7 +138,12 @@ export default function Accounting() {
         createdAt: data.createdAt?.toDate?.() || new Date(),
       } as BankAccount;
     });
-    setBankAccounts(list.filter((b) => b.accountName));
+    // Filter out ABC BANK and other test banks
+    const filteredList = list.filter((b) => {
+      const name = (b.accountName || "").toUpperCase().trim();
+      return name && name !== "ABC BANK" && name !== "ABC" && name !== "TEST BANK" && name !== "TEST";
+    });
+    setBankAccounts(filteredList);
   };
 
   const fetchAll = async () => {

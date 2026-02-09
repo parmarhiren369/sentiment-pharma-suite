@@ -156,7 +156,12 @@ export default function Transactions() {
         balance: typeof data.balance === "number" ? data.balance : 0,
       } as BankAccount;
     });
-    setBankAccounts(list.filter((b) => b.accountName));
+    // Filter out ABC BANK and test banks
+    const filteredList = list.filter((b) => {
+      const name = (b.accountName || "").toUpperCase().trim();
+      return name && name !== "ABC BANK" && name !== "ABC" && name !== "TEST BANK" && name !== "TEST";
+    });
+    setBankAccounts(filteredList);
   };
 
   const fetchCashAccounts = async () => {

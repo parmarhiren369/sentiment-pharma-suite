@@ -1665,14 +1665,41 @@ export default function Payments() {
                                                         onClick={(e) => {
                                                           e.stopPropagation();
                                                           const url = new URL(`/payments/${payment.id}/print`, window.location.origin).toString();
-                                                          const w = window.open(url, "_blank", "noopener,noreferrer");
+                                                          const w = window.open(url, "_blank");
                                                           if (!w) {
                                                             toast({
                                                               title: "Popup blocked",
                                                               description: "Please allow popups to print the payment statement.",
                                                               variant: "destructive",
                                                             });
+                                                            return;
                                                           }
+
+                                                          const triggerPrint = () => {
+                                                            try {
+                                                              w.focus();
+                                                              w.print();
+                                                            } catch (error) {
+                                                              console.error("Print failed", error);
+                                                            }
+                                                          };
+
+                                                          const timer = window.setInterval(() => {
+                                                            if (w.closed) {
+                                                              window.clearInterval(timer);
+                                                              return;
+                                                            }
+                                                            const ready = w.document?.readyState === "complete";
+                                                            if (ready) {
+                                                              window.clearInterval(timer);
+                                                              triggerPrint();
+                                                            }
+                                                          }, 300);
+
+                                                          w.onload = () => {
+                                                            window.clearInterval(timer);
+                                                            triggerPrint();
+                                                          };
                                                         }}
                                                       >
                                                         Print

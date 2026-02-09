@@ -16,6 +16,8 @@ interface HistoryEntry {
   note: string;
   doctor?: string;
   prescription?: string;
+  pastHistory?: string;
+  personalHistory?: string;
 }
 
 interface Patient {
@@ -24,6 +26,12 @@ interface Patient {
   age?: number;
   gender?: string;
   phone?: string;
+  mobile?: string;
+  email?: string;
+  weight?: string;
+  height?: string;
+  bloodPressure?: string;
+  bloodGroup?: string;
   notes?: string;
   histories: HistoryEntry[];
 }
@@ -62,6 +70,12 @@ export default function DoctorDashboard() {
             age: data.age,
             gender: data.gender,
             phone: data.phone,
+            mobile: data.mobile,
+            email: data.email,
+            weight: data.weight,
+            height: data.height,
+            bloodPressure: data.bloodPressure,
+            bloodGroup: data.bloodGroup,
             notes: data.notes,
             histories: data.histories || []
           } as Patient;
@@ -104,6 +118,12 @@ export default function DoctorDashboard() {
       age: p.age,
       gender: p.gender,
       phone: p.phone,
+      mobile: p.mobile,
+      email: p.email,
+      weight: p.weight,
+      height: p.height,
+      bloodPressure: p.bloodPressure,
+      bloodGroup: p.bloodGroup,
       notes: p.notes,
       histories: [],
       createdAt: new Date().toISOString()
@@ -206,6 +226,12 @@ export default function DoctorDashboard() {
     const [age, setAge] = useState("");
     const [gender, setGender] = useState("");
     const [phone, setPhone] = useState("");
+    const [mobile, setMobile] = useState("");
+    const [email, setEmail] = useState("");
+    const [weight, setWeight] = useState("");
+    const [height, setHeight] = useState("");
+    const [bloodPressure, setBloodPressure] = useState("");
+    const [bloodGroup, setBloodGroup] = useState("");
     const [notes, setNotes] = useState("");
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -218,19 +244,31 @@ export default function DoctorDashboard() {
         });
         return;
       }
-      addPatient({ name: name.trim(), age: age ? Number(age) : undefined, gender, phone, notes });
+      addPatient({ 
+        name: name.trim(), 
+        age: age ? Number(age) : undefined, 
+        gender, 
+        phone, 
+        mobile, 
+        email, 
+        weight, 
+        height, 
+        bloodPressure, 
+        bloodGroup, 
+        notes 
+      });
       toast({
         title: "Patient Added",
         description: `${name.trim()} has been added successfully`,
       });
-      setName(""); setAge(""); setGender(""); setPhone(""); setNotes("");
+      setName(""); setAge(""); setGender(""); setPhone(""); setMobile(""); setEmail(""); setWeight(""); setHeight(""); setBloodPressure(""); setBloodGroup(""); setNotes("");
     };
 
     return (
       <div className="p-6 space-y-6">
         <div>
           <h2 className="text-2xl font-semibold mb-2">Add Patient</h2>
-          <form onSubmit={handleSubmit} className="space-y-4 max-w-xl bg-card p-4 rounded-lg border">
+          <form onSubmit={handleSubmit} className="space-y-4 max-w-3xl bg-card p-4 rounded-lg border">
             <div>
               <Label htmlFor="pname">Full Name</Label>
               <Input id="pname" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. John Doe" />
@@ -238,16 +276,46 @@ export default function DoctorDashboard() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="page">Age</Label>
-                <Input id="page" value={age} onChange={(e) => setAge(e.target.value)} placeholder="45" />
+                <Input id="page" type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="45" />
               </div>
               <div>
-                <Label htmlFor="pgender">Gender</Label>
-                <Input id="pgender" value={gender} onChange={(e) => setGender(e.target.value)} placeholder="Male / Female" />
+                <Label htmlFor="pgender">Sex</Label>
+                <Input id="pgender" value={gender} onChange={(e) => setGender(e.target.value)} placeholder="Male / Female / Other" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="pphone">Phone</Label>
+                <Input id="pphone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 234 567 890" />
+              </div>
+              <div>
+                <Label htmlFor="pmobile">Mobile</Label>
+                <Input id="pmobile" value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="+1 987 654 321" />
               </div>
             </div>
             <div>
-              <Label htmlFor="pphone">Phone</Label>
-              <Input id="pphone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 234 567 890" />
+              <Label htmlFor="pemail">Email</Label>
+              <Input id="pemail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="john.doe@example.com" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="pweight">Weight</Label>
+                <Input id="pweight" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="70 kg" />
+              </div>
+              <div>
+                <Label htmlFor="pheight">Height</Label>
+                <Input id="pheight" value={height} onChange={(e) => setHeight(e.target.value)} placeholder="175 cm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="pbp">Blood Pressure</Label>
+                <Input id="pbp" value={bloodPressure} onChange={(e) => setBloodPressure(e.target.value)} placeholder="120/80 mmHg" />
+              </div>
+              <div>
+                <Label htmlFor="pbg">Blood Group</Label>
+                <Input id="pbg" value={bloodGroup} onChange={(e) => setBloodGroup(e.target.value)} placeholder="A+, B+, O+, AB+, etc." />
+              </div>
             </div>
             <div>
               <Label htmlFor="pnotes">Notes</Label>
@@ -255,7 +323,7 @@ export default function DoctorDashboard() {
             </div>
             <div className="flex gap-2">
               <Button type="submit">Add Patient</Button>
-              <Button type="button" variant="outline" onClick={() => { setName(""); setAge(""); setGender(""); setPhone(""); setNotes(""); }}>Reset</Button>
+              <Button type="button" variant="outline" onClick={() => { setName(""); setAge(""); setGender(""); setPhone(""); setMobile(""); setEmail(""); setWeight(""); setHeight(""); setBloodPressure(""); setBloodGroup(""); setNotes(""); }}>Reset</Button>
             </div>
           </form>
         </div>
@@ -275,9 +343,13 @@ export default function DoctorDashboard() {
                       <th className="text-left p-3 font-medium">#</th>
                       <th className="text-left p-3 font-medium">Name</th>
                       <th className="text-left p-3 font-medium">Age</th>
-                      <th className="text-left p-3 font-medium">Gender</th>
-                      <th className="text-left p-3 font-medium">Phone</th>
-                      <th className="text-left p-3 font-medium">Notes</th>
+                      <th className="text-left p-3 font-medium">Sex</th>
+                      <th className="text-left p-3 font-medium">Mobile</th>
+                      <th className="text-left p-3 font-medium">Email</th>
+                      <th className="text-left p-3 font-medium">Weight</th>
+                      <th className="text-left p-3 font-medium">Height</th>
+                      <th className="text-left p-3 font-medium">BP</th>
+                      <th className="text-left p-3 font-medium">Blood Group</th>
                       <th className="text-left p-3 font-medium">Histories</th>
                     </tr>
                   </thead>
@@ -288,8 +360,12 @@ export default function DoctorDashboard() {
                         <td className="p-3 font-medium">{patient.name}</td>
                         <td className="p-3">{patient.age || "—"}</td>
                         <td className="p-3">{patient.gender || "—"}</td>
-                        <td className="p-3">{patient.phone || "—"}</td>
-                        <td className="p-3 text-sm text-muted-foreground max-w-xs truncate">{patient.notes || "—"}</td>
+                        <td className="p-3">{patient.mobile || "—"}</td>
+                        <td className="p-3 text-sm">{patient.email || "—"}</td>
+                        <td className="p-3">{patient.weight || "—"}</td>
+                        <td className="p-3">{patient.height || "—"}</td>
+                        <td className="p-3">{patient.bloodPressure || "—"}</td>
+                        <td className="p-3">{patient.bloodGroup || "—"}</td>
                         <td className="p-3">
                           <span className="bg-primary/10 text-primary px-2 py-1 rounded text-sm">
                             {patient.histories?.length || 0}
@@ -313,6 +389,8 @@ export default function DoctorDashboard() {
     const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
     const [doctor, setDoctor] = useState("");
     const [prescription, setPrescription] = useState("");
+    const [pastHistory, setPastHistory] = useState("");
+    const [personalHistory, setPersonalHistory] = useState("");
 
     useEffect(() => {
       if (!selectedPatientId && patients.length) setSelectedPatientId(patients[0].id);
@@ -328,13 +406,20 @@ export default function DoctorDashboard() {
         });
         return;
       }
-      addHistory(selectedPatientId, { date, note: note.trim(), doctor: doctor.trim() || undefined, prescription: prescription.trim() || undefined });
+      addHistory(selectedPatientId, { 
+        date, 
+        note: note.trim(), 
+        doctor: doctor.trim() || undefined, 
+        prescription: prescription.trim() || undefined,
+        pastHistory: pastHistory.trim() || undefined,
+        personalHistory: personalHistory.trim() || undefined
+      });
       const patientName = patients.find(p => p.id === selectedPatientId)?.name || "Patient";
       toast({
         title: "History Added",
         description: `New history entry added for ${patientName}`,
       });
-      setNote(""); setDoctor(""); setPrescription("");
+      setNote(""); setDoctor(""); setPrescription(""); setPastHistory(""); setPersonalHistory("");
     };
 
     const selPatient = patients.find(p => p.id === selectedPatientId) || null;
@@ -374,16 +459,24 @@ export default function DoctorDashboard() {
                     </div>
                   </div>
                   <div>
-                    <Label htmlFor="hnote">Note</Label>
+                    <Label htmlFor="hnote">New Entry</Label>
                     <Input id="hnote" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Visit summary" />
                   </div>
                   <div>
                     <Label htmlFor="hpres">Prescription</Label>
                     <Input id="hpres" value={prescription} onChange={(e) => setPrescription(e.target.value)} placeholder="Medicines" />
                   </div>
+                  <div>
+                    <Label htmlFor="hpast">Past History</Label>
+                    <Input id="hpast" value={pastHistory} onChange={(e) => setPastHistory(e.target.value)} placeholder="Previous medical conditions, surgeries, etc." />
+                  </div>
+                  <div>
+                    <Label htmlFor="hpersonal">Personal History</Label>
+                    <Input id="hpersonal" value={personalHistory} onChange={(e) => setPersonalHistory(e.target.value)} placeholder="Lifestyle, habits, family history, etc." />
+                  </div>
                   <div className="flex gap-2">
                     <Button type="submit">Add History</Button>
-                    <Button type="button" variant="outline" onClick={() => { setNote(""); setDoctor(""); setPrescription(""); }}>Reset</Button>
+                    <Button type="button" variant="outline" onClick={() => { setNote(""); setDoctor(""); setPrescription(""); setPastHistory(""); setPersonalHistory(""); }}>Reset</Button>
                   </div>
                 </form>
               )}
@@ -397,15 +490,29 @@ export default function DoctorDashboard() {
                 <ul className="space-y-3 max-h-[500px] overflow-y-auto">
                   {[...selPatient.histories].reverse().map(h => (
                     <li key={h.id} className="border rounded p-3 hover:bg-muted/20 transition-colors">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="font-medium text-primary">{h.date}</div>
-                          <div className="text-sm mt-1">{h.note}</div>
-                          {h.doctor && <div className="text-xs text-muted-foreground mt-1">👨‍⚕️ By: {h.doctor}</div>}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="font-medium text-primary">{h.date}</div>
+                            <div className="text-sm mt-1">{h.note}</div>
+                            {h.doctor && <div className="text-xs text-muted-foreground mt-1">👨‍⚕️ By: {h.doctor}</div>}
+                          </div>
+                          {h.prescription && (
+                            <div className="ml-3 text-xs bg-primary/10 px-2 py-1 rounded">
+                              💊 {h.prescription}
+                            </div>
+                          )}
                         </div>
-                        {h.prescription && (
-                          <div className="ml-3 text-xs bg-primary/10 px-2 py-1 rounded">
-                            💊 {h.prescription}
+                        {h.pastHistory && (
+                          <div className="text-sm border-t pt-2">
+                            <span className="font-medium text-muted-foreground">Past History:</span>
+                            <div className="mt-1">{h.pastHistory}</div>
+                          </div>
+                        )}
+                        {h.personalHistory && (
+                          <div className="text-sm border-t pt-2">
+                            <span className="font-medium text-muted-foreground">Personal History:</span>
+                            <div className="mt-1">{h.personalHistory}</div>
                           </div>
                         )}
                       </div>

@@ -76,10 +76,16 @@ export default function BankBook() {
         opening: typeof data.opening === "number" ? data.opening : parseFloat(data.opening) || 0,
       } as BankAccount;
     });
-    // Filter out ABC BANK and test banks
+    // Filter out ABC BANK, test banks, and CASH accounts
     const filteredList = list.filter((b) => {
       const name = (b.accountName || "").toUpperCase().trim();
-      return name && name !== "ABC BANK" && name !== "ABC" && name !== "TEST BANK" && name !== "TEST";
+      return name && 
+        name !== "ABC BANK" && 
+        name !== "ABC" && 
+        name !== "TEST BANK" && 
+        name !== "TEST" &&
+        name !== "CASH" &&
+        !name.includes("CASH");
     });
     setAccounts(filteredList);
   };
@@ -93,21 +99,28 @@ export default function BankBook() {
       getDocs(query(collection(db, "transactions"), orderBy("createdAt", "desc")))
     ]);
     
-    const accountingTxList = accountingTxSnap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        date: (data.date || "").toString(),
-        description: (data.description || "").toString(),
-        type: (data.type || "Deposit") as "Deposit" | "Withdrawal",
-        amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
-        accountId: (data.accountId || "").toString(),
-        accountName: data.accountName ? data.accountName.toString() : undefined,
-        reference: data.reference ? data.reference.toString() : undefined,
-        status: (data.status || "Completed").toString(),
-        createdAt: data.createdAt?.toDate?.() || new Date(),
-      } as Transaction;
-    });
+    const accountingTxList = accountingTxSnap.docs
+      .map((d) => {
+        const data = d.data();
+        const accountName = (data.accountName || "").toUpperCase().trim();
+        // Skip cash account transactions
+        if (accountName === "CASH" || accountName.includes("CASH")) {
+          return null;
+        }
+        return {
+          id: d.id,
+          date: (data.date || "").toString(),
+          description: (data.description || "").toString(),
+          type: (data.type || "Deposit") as "Deposit" | "Withdrawal",
+          amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
+          accountId: (data.accountId || "").toString(),
+          accountName: data.accountName ? data.accountName.toString() : undefined,
+          reference: data.reference ? data.reference.toString() : undefined,
+          status: (data.status || "Completed").toString(),
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+        } as Transaction;
+      })
+      .filter((t): t is Transaction => t !== null);
     
     // Convert regular transactions to bank format
     const regularTxList = regularTxSnap.docs.map((d) => {

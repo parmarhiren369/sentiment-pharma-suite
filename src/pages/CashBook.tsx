@@ -106,6 +106,12 @@ export default function CashBook() {
     const list = snap.docs
       .map((d) => {
         const data = d.data();
+        const accountName = (data.accountName || "").toUpperCase().trim();
+        // Only include cash account transactions
+        const isCashTransaction = accountName === "CASH" || accountName.includes("CASH");
+        if (!isCashTransaction) {
+          return null;
+        }
         return {
           id: d.id,
           date: (data.date || "").toString(),
@@ -119,8 +125,9 @@ export default function CashBook() {
           createdAt: data.createdAt?.toDate?.() || new Date(),
         } as Transaction;
       })
-      .filter((t) => {
-        // Only include cash account transactions
+      .filter((t): t is Transaction => {
+        // Additional check: match with cash account IDs
+        if (t === null) return false;
         const acc = accounts.find((a) => a.id === t.accountId);
         return acc !== undefined;
       });

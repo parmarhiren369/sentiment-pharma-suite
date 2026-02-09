@@ -1597,7 +1597,7 @@ export default function Payments() {
 
                                 {isInvoiceExpanded && (
                                   <TableRow>
-                                    <TableCell colSpan={9} className="bg-muted/30 p-0">
+                                    <TableCell colSpan={10} className="bg-muted/30 p-0">
                                       <div className="p-4">
                                         <div className="text-sm font-semibold mb-3">
                                           Payment & Adjustment Details for {r.invoiceNo}
@@ -1615,12 +1615,13 @@ export default function Payments() {
                                                 <TableHead className="text-right">Cumulative</TableHead>
                                                 <TableHead>Notes</TableHead>
                                                 <TableHead>Status</TableHead>
+                                                <TableHead className="text-right">Print</TableHead>
                                               </TableRow>
                                             </TableHeader>
                                             <TableBody>
                                               {paymentsWithCumulative.length === 0 ? (
                                                 <TableRow>
-                                                  <TableCell colSpan={9} className="text-center text-muted-foreground">
+                                                  <TableCell colSpan={10} className="text-center text-muted-foreground">
                                                     No payments found for this invoice.
                                                   </TableCell>
                                                 </TableRow>
@@ -1656,6 +1657,27 @@ export default function Payments() {
                                                         {payment.status}
                                                       </span>
                                                     </TableCell>
+                                                    <TableCell className="text-right">
+                                                      <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          const url = new URL(`/payments/${payment.id}/print`, window.location.origin).toString();
+                                                          const w = window.open(url, "_blank", "noopener,noreferrer");
+                                                          if (!w) {
+                                                            toast({
+                                                              title: "Popup blocked",
+                                                              description: "Please allow popups to print the payment statement.",
+                                                              variant: "destructive",
+                                                            });
+                                                          }
+                                                        }}
+                                                      >
+                                                        Print
+                                                      </Button>
+                                                    </TableCell>
                                                   </TableRow>
                                                 ))
                                               )}
@@ -1667,7 +1689,7 @@ export default function Payments() {
                                                   <TableCell className="text-right">
                                                     Total Received: {money(cumulative)}
                                                   </TableCell>
-                                                  <TableCell colSpan={4}></TableCell>
+                                                  <TableCell colSpan={5}></TableCell>
                                                 </TableRow>
                                               )}
                                             </TableBody>

@@ -26,6 +26,7 @@ import Payments from "./pages/Payments";
 import Invoices from "./pages/Invoices";
 import InvoiceNew from "./pages/InvoiceNew";
 import InvoicePrint from "./pages/InvoicePrint";
+import PaymentPrint from "./pages/PaymentPrint";
 import DebitCreditNotes from "./pages/DebitCreditNotes";
 import DebitCreditNoteNew from "./pages/DebitCreditNoteNew";
 import BankBook from "./pages/BankBook";
@@ -73,6 +74,7 @@ const App = () => {
                 <Route path="/doctor-login" element={<DoctorLogin />} />
                 <Route path="/doctor-dashboard" element={<DoctorDashboard />} />
                 <Route path="/invoices/:invoiceId/print" element={<InvoicePrint />} />
+                <Route path="/payments/:paymentId/print" element={<PaymentPrint />} />
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Index />} />
                   <Route path="/items" element={<Items />} />

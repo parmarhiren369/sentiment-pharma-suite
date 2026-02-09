@@ -141,15 +141,6 @@ export default function Transactions() {
       const accountBalance = (c.opening || 0) + accountDeposits - accountWithdrawals;
       return sum + accountBalance;
     }, 0);
-    
-    console.log("Stats calculation:", {
-      bankAccountsCount: bankAccounts.length,
-      cashAccountsCount: cashAccounts.length,
-      totalBankBalance,
-      totalCashBalance,
-      transactionsCount: transactions.length
-    });
-
     return {
       total: transactions.length,
       deposits,
@@ -221,17 +212,19 @@ export default function Transactions() {
         console.error("Error creating default cash account", error);
       }
     }
-    
-    console.log("Cash accounts loaded:", list);
     setCashAccounts(list);
   };
 
   const fetchTransactions = async () => {
-    // Fetch from accountingTransactions collection
-    const qy = query(collection(db, "accountingTransactions"), orderBy("createdAt", "desc"));
-    const snap = await getDocs(qy);
-    const list = snap.docs.map((d) => {
+    const [accountingSnap, regularSnap] = await Promise.all([
+      getDocs(query(collection(db, "accountingTransactions"), orderBy("createdAt", "desc"))),
+      getDocs(query(collection(db, "transactions"), orderBy("createdAt", "desc"))),
+    ]);
+
+    const accountingList = accountingSnap.docs.map((d) => {
       const data = d.data();
+      const accountName = (data.accountName || "").toString();
+      const accountType = accountName.toUpperCase().includes("CASH") ? "cash" : "bank";
       return {
         id: d.id,
         date: (data.date || "").toString(),
@@ -241,28 +234,52 @@ export default function Transactions() {
         category: (data.category || "General").toString(),
         paymentMethod: (data.paymentMethod || "Cash") as PaymentMethod,
         transferCharge: typeof data.transferCharge === "number" ? data.transferCharge : parseFloat(data.transferCharge) || 0,
-        accountType: (data.accountType || "cash") as "bank" | "cash",
+        accountType,
         accountId: (data.accountId || "").toString(),
-        accountName: (data.accountName || "").toString() || undefined,
+        accountName: accountName || undefined,
         reference: (data.reference || "").toString() || undefined,
         notes: (data.notes || "").toString() || undefined,
         status: (data.status || "Completed") as TransactionStatus,
         createdAt: data.createdAt?.toDate?.() || new Date(),
       } as TransactionRecord;
     });
-    
-    console.log("Fetched transactions:", list.length);
-    console.log("Bank accounts:", bankAccounts.map(b => ({ id: b.id, name: b.accountName, opening: b.opening })));
-    console.log("Cash accounts:", cashAccounts.map(c => ({ id: c.id, name: c.accountName, opening: c.opening })));
-    console.log("Sample transactions with accountIds:", list.slice(0, 5).map(t => ({ 
-      desc: t.description, 
-      accountId: t.accountId, 
-      accountName: t.accountName,
-      amount: t.amount,
-      type: t.type 
-    })));
-    
-    setTransactions(list);
+
+    const accountingKeys = new Set(
+      accountingList.map(
+        (t) => `${t.date}|${t.amount}|${t.type}|${t.accountId}|${t.reference || ""}`
+      )
+    );
+
+    const regularList = regularSnap.docs
+      .map((d) => {
+        const data = d.data();
+        const bankAccountId = (data.bankAccountId || "").toString();
+        if (!bankAccountId) return null;
+        return {
+          id: d.id,
+          date: (data.date || "").toString(),
+          description: (data.description || "").toString(),
+          type: (data.type === "Income" ? "Deposit" : "Withdrawal") as TransactionType,
+          amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount) || 0,
+          category: (data.category || "General").toString(),
+          paymentMethod: (data.paymentMethod || "Bank") as PaymentMethod,
+          transferCharge: typeof data.transferCharge === "number" ? data.transferCharge : parseFloat(data.transferCharge) || 0,
+          accountType: "bank" as const,
+          accountId: bankAccountId,
+          accountName: (data.bankAccountName || "").toString() || undefined,
+          reference: (data.reference || "").toString() || undefined,
+          notes: (data.notes || "").toString() || undefined,
+          status: (data.status || "Completed") as TransactionStatus,
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+        } as TransactionRecord;
+      })
+      .filter((t): t is TransactionRecord => t !== null)
+      .filter((t) => {
+        const key = `${t.date}|${t.amount}|${t.type}|${t.accountId}|${t.reference || ""}`;
+        return !accountingKeys.has(key);
+      });
+
+    setTransactions([...accountingList, ...regularList]);
   };
 
   const fetchAll = async () => {

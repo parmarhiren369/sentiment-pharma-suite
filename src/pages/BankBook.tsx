@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -52,10 +52,6 @@ interface AccountSummary {
 export default function BankBook() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [searchParams] = useSearchParams();
-  const selectedBankId = searchParams.get('bankId');
-  const selectedBankName = searchParams.get('bankName');
-  
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [search, setSearch] = useState("");
@@ -112,11 +108,7 @@ export default function BankBook() {
   };
 
   const accountSummaries = useMemo(() => {
-    const filteredAccounts = selectedBankId 
-      ? accounts.filter(acc => acc.id === selectedBankId)
-      : accounts;
-      
-    return filteredAccounts.map((acc) => {
+    return accounts.map((acc) => {
       const accTransactions = transactions.filter(
         (t) => t.accountId === acc.id && t.status === "Completed"
       );
@@ -142,7 +134,7 @@ export default function BankBook() {
         closing,
       } as AccountSummary;
     });
-  }, [accounts, transactions, selectedBankId]);
+  }, [accounts, transactions]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return accountSummaries;
@@ -259,17 +251,14 @@ export default function BankBook() {
 
   return (
     <>
-      <AppHeader 
-        title={selectedBankName ? `${selectedBankName} - Bank Details` : "Bank Accounts"} 
-        subtitle={selectedBankName ? "Detailed transactions for this bank account" : "View all bank account balances"} 
-      />
+      <AppHeader title="Bank Accounts" subtitle="View all bank account balances" />
 
       <div className="flex-1 overflow-auto p-6">
         <Card className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <Button variant="outline" onClick={() => navigate(selectedBankId ? "/accounting" : "/transactions")} className="gap-2">
+            <Button variant="outline" onClick={() => navigate("/transactions")} className="gap-2">
               <ArrowLeft className="h-4 w-4" />
-              {selectedBankId ? "Back to Accounting" : "Back to Transactions"}
+              Back to Transactions
             </Button>
             <Button onClick={downloadPDF} className="gap-2">
               <Download className="h-4 w-4" />

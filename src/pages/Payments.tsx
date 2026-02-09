@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/cards/StatCard";
 import { Button } from "@/components/ui/button";
@@ -144,6 +145,7 @@ function partyShortCode(name: string): string {
 }
 
 export default function Payments() {
+  const navigate = useNavigate();
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [customers, setCustomers] = useState<PartyOption[]>([]);
   const [suppliers, setSuppliers] = useState<PartyOption[]>([]);
@@ -1015,8 +1017,12 @@ export default function Payments() {
                 type="button"
                 variant={activePartyType === "supplier" ? "default" : "outline"}
                 onClick={() => {
-                  setActivePartyType("supplier");
-                  setOpenPartyId(null);
+                  if (activePartyType === "supplier") {
+                    navigate("/purchases");
+                  } else {
+                    setActivePartyType("supplier");
+                    setOpenPartyId(null);
+                  }
                 }}
               >
                 Suppliers

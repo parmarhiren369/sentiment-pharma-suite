@@ -863,30 +863,51 @@ export default function Payments() {
       </html>
     `;
 
-    const w = window.open("", "_blank");
-    if (!w) {
-      toast({ title: "Popup blocked", description: "Please allow popups to print the statement." });
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.setAttribute("aria-hidden", "true");
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      toast({ title: "Print failed", description: "Unable to create print document." });
+      iframe.remove();
       return;
     }
 
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    let printed = false;
+    const cleanup = () => {
+      setTimeout(() => iframe.remove(), 500);
+    };
 
     const triggerPrint = () => {
+      if (printed) return;
+      printed = true;
       try {
-        w.focus();
-        w.print();
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
       } catch (error) {
         console.error("Print failed", error);
+        toast({ title: "Print failed", description: "Use your browser print (Ctrl/Cmd+P)." });
+      } finally {
+        cleanup();
       }
     };
 
-    if (w.document.readyState === "complete") {
+    if (iframe.contentWindow?.document.readyState === "complete") {
       triggerPrint();
     } else {
-      w.onload = () => triggerPrint();
-      setTimeout(() => triggerPrint(), 600);
+      iframe.onload = () => triggerPrint();
+      setTimeout(() => triggerPrint(), 500);
     }
   };
 
